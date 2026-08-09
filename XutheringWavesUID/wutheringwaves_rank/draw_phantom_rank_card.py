@@ -317,7 +317,10 @@ async def draw_phantom_rank_img(
 
     bar = draw_phantom_bar_bg(Image.open(TEXT_PATH / "bar1.png"), GROUP_WIDTH)
     _avatar_cid = int(char_id) if str(char_id).isdigit() else None
-    avatar_tasks = [get_avatar(r.qid, "", char_id=_avatar_cid) for r in details]
+    avatar_tasks = [
+        get_avatar(r.qid, "", char_id=_avatar_cid, bot_id=ev.bot_id, bot_self_id=ev.bot_self_id)
+        for r in details
+    ]
     icon_tasks = [_safe_phantom_icon(r.phantom) for r in details]
     fetter_tasks = [_safe_fetter_icon(r.phantom) for r in details]
     avatars, phantom_icons, fetter_icons = await asyncio.gather(

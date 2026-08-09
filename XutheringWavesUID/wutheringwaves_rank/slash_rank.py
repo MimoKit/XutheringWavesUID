@@ -208,7 +208,15 @@ async def draw_all_slash_rank_card(bot: Bot, ev: Event, page: int = 1):
     card_img.paste(char_mask_temp, (0, 0), char_mask_temp)
 
     rank_list = rankInfoList.data.rank_list
-    tasks = [get_avatar(rank.user_id, getattr(rank, "sender_avatar", "")) for rank in rank_list]
+    tasks = [
+        get_avatar(
+            rank.user_id,
+            getattr(rank, "sender_avatar", ""),
+            bot_id=ev.bot_id,
+            bot_self_id=ev.bot_self_id,
+        )
+        for rank in rank_list
+    ]
     results = await asyncio.gather(*tasks)
 
     for rank_temp_index, temp in enumerate(zip(rank_list, results)):
@@ -563,7 +571,12 @@ async def draw_slash_rank_list(bot: Bot, ev: Event, page: int = 1):
 
     # 获取头像
     tasks = [
-        get_avatar(rank.user_id, getattr(rank, "sender_avatar", ""))
+        get_avatar(
+            rank.user_id,
+            getattr(rank, "sender_avatar", ""),
+            bot_id=ev.bot_id,
+            bot_self_id=ev.bot_self_id,
+        )
         for rank in rankInfoList_display
     ]
     results = await asyncio.gather(*tasks)

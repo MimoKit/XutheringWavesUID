@@ -345,7 +345,12 @@ async def draw_rank_list(bot: Bot, ev: Event, threshold: int = 175) -> Union[str
 
     # 获取头像
     tasks = [
-        get_avatar(rank.qid, getattr(rank, "sender_avatar", ""))
+        get_avatar(
+            rank.qid,
+            getattr(rank, "sender_avatar", ""),
+            bot_id=ev.bot_id,
+            bot_self_id=ev.bot_self_id,
+        )
         for rank in rankInfoList_display
     ]
     results = await asyncio.gather(*tasks)

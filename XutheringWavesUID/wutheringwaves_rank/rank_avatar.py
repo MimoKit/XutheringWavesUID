@@ -1,4 +1,4 @@
-"""rank 模块共用的头像逻辑（fallback：sender_avatar → DB → QQ → 角色头像）"""
+"""rank 模块共用的头像逻辑（fallback：sender_avatar → DB → QQ(onebot) / qqapp(官方机器人) → 角色头像）"""
 import io
 from pathlib import Path
 from typing import Optional
@@ -7,7 +7,10 @@ import httpx
 from PIL import Image
 
 from gsuid_core.logger import logger
-from gsuid_core.utils.image.image_tools import crop_center_img
+from gsuid_core.utils.image.image_tools import (
+    crop_center_img,
+    get_qqgroup_avatar,
+)
 
 from ..utils.cache import TimedCache
 from ..utils.database.models import WavesUser
@@ -61,10 +64,14 @@ async def get_avatar(
     qid: Optional[str],
     sender_avatar: Optional[str] = None,
     char_id: Optional[int] = None,
+    bot_id: Optional[str] = None,
+    bot_self_id: Optional[str] = None,
 ) -> Image.Image:
-    """fallback：sender_avatar → DB avatar_url → QQ → 角色头像。
+    """fallback：sender_avatar → DB avatar_url → QQ(onebot) / qqapp(官方机器人) → 角色头像。
 
     DB 优先于 QQ：qlogo 对未注册号也返回占位图（非 None），放后面会盖过真实头像。
+    官方机器人（qqgroup）的 user_id 是 openid（非纯数字），qlogo 不认，需走
+    q.qlogo.cn/qqapp/{bot_self_id}/{openid} 官方接口。
     """
     qid = str(qid) if qid is not None else None
     pic: Optional[Image.Image] = None
@@ -74,17 +81,31 @@ async def get_avatar(
     if pic is None:
         pic = await _fetch_db_avatar_image(qid)
 
-    if pic is None and qid and qid.isdigit():
-        if WutheringWavesConfig.get_config("QQPicCache").data:
-            pic = pic_cache.get(qid)
-        if pic is None:
-            try:
-                pic = await get_qq_avatar(qid, size=100)
-            except Exception as e:
-                logger.debug(f"[鸣潮·排行头像] QQ 头像获取失败 qid={qid}: {e}")
-                pic = None
-            if pic:
-                pic_cache.set(qid, pic)
+    if pic is None and qid:
+        if bot_id == "qqgroup" and bot_self_id:
+            # 官方机器人：openid 走 qqapp 接口
+            cache_key = f"qqgroup:{bot_self_id}:{qid}"
+            if WutheringWavesConfig.get_config("QQPicCache").data:
+                pic = pic_cache.get(cache_key)
+            if pic is None:
+                try:
+                    pic = await get_qqgroup_avatar(bot_self_id, qid)
+                except Exception as e:
+                    logger.debug(f"[鸣潮·排行头像] qqgroup 头像获取失败 qid={qid}: {e}")
+                    pic = None
+                if pic:
+                    pic_cache.set(cache_key, pic)
+        elif qid.isdigit():
+            if WutheringWavesConfig.get_config("QQPicCache").data:
+                pic = pic_cache.get(qid)
+            if pic is None:
+                try:
+                    pic = await get_qq_avatar(qid, size=100)
+                except Exception as e:
+                    logger.debug(f"[鸣潮·排行头像] QQ 头像获取失败 qid={qid}: {e}")
+                    pic = None
+                if pic:
+                    pic_cache.set(qid, pic)
 
     if pic is not None:
         pic_temp = crop_center_img(pic, 120, 120)

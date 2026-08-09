@@ -256,7 +256,13 @@ async def draw_all_rank_card(bot: Bot, ev: Event, char: str, rank_type: str, pag
     total_damage = 0
 
     tasks = [
-        get_avatar(rank.user_id, getattr(rank, "sender_avatar", ""), char_id=rank.char_id)
+        get_avatar(
+            rank.user_id,
+            getattr(rank, "sender_avatar", ""),
+            char_id=rank.char_id,
+            bot_id=ev.bot_id,
+            bot_self_id=ev.bot_self_id,
+        )
         for rank in details
     ]
     results = await asyncio.gather(*tasks)

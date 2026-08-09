@@ -298,7 +298,15 @@ async def draw_all_matrix_rank_card(
     rank_list = rankInfoList.data.rank_list
     board_7digit = any(rank.score >= 1_000_000 for rank in rank_list)
     board_6digit = any(rank.score >= 100_000 for rank in rank_list)
-    tasks = [get_avatar(rank.user_id, getattr(rank, "sender_avatar", "")) for rank in rank_list]
+    tasks = [
+        get_avatar(
+            rank.user_id,
+            getattr(rank, "sender_avatar", ""),
+            bot_id=ev.bot_id,
+            bot_self_id=ev.bot_self_id,
+        )
+        for rank in rank_list
+    ]
     results = await asyncio.gather(*tasks)
     bar = _get_matrix_rank_bar(width)
 
@@ -883,7 +891,15 @@ async def draw_matrix_rank_list(
     card_img.paste(char_mask_temp, (0, 0), char_mask_temp)
 
     # 获取头像
-    tasks = [get_avatar(rank.user_id, getattr(rank, "sender_avatar", "")) for rank in rankInfoList_display]
+    tasks = [
+        get_avatar(
+            rank.user_id,
+            getattr(rank, "sender_avatar", ""),
+            bot_id=ev.bot_id,
+            bot_self_id=ev.bot_self_id,
+        )
+        for rank in rankInfoList_display
+    ]
     results = await asyncio.gather(*tasks)
 
     # 绘制排行条目

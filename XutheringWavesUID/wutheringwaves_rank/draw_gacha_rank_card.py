@@ -202,7 +202,12 @@ async def draw_gacha_rank_card(bot, ev: Event) -> Union[str, bytes]:
 
     # 获取头像
     tasks = [
-        get_avatar(rank_info.user_id, getattr(rank_info, "sender_avatar", ""))
+        get_avatar(
+            rank_info.user_id,
+            getattr(rank_info, "sender_avatar", ""),
+            bot_id=ev.bot_id,
+            bot_self_id=ev.bot_self_id,
+        )
         for _, rank_info in rankInfoList_display
     ]
     results = await asyncio.gather(*tasks)

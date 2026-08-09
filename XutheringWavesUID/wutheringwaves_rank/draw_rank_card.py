@@ -386,7 +386,13 @@ async def draw_rank_img(
     total_damage = 0
 
     tasks = [
-        get_avatar(rank.qid, getattr(rank, "sender_avatar", ""), char_id=rank.roleDetail.role.roleId)
+        get_avatar(
+            rank.qid,
+            getattr(rank, "sender_avatar", ""),
+            char_id=rank.roleDetail.role.roleId,
+            bot_id=ev.bot_id,
+            bot_self_id=ev.bot_self_id,
+        )
         for rank in rankInfoList
     ]
     results = await asyncio.gather(*tasks)

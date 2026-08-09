@@ -542,7 +542,16 @@ async def draw_phantom_total_rank(bot: Bot, ev: Event, char: str, pages: int) ->
     await compose_pile_header(card_img, char_id, char, "声骸总排行", f"{avg_val:.1f}")
 
     bar = draw_phantom_bar_bg(Image.open(TEXT_PATH / "bar1.png"))
-    avatar_tasks = [get_avatar(d.user_id, getattr(d, "sender_avatar", ""), char_id=d.char_id) for d in details]
+    avatar_tasks = [
+        get_avatar(
+            d.user_id,
+            getattr(d, "sender_avatar", ""),
+            char_id=d.char_id,
+            bot_id=ev.bot_id,
+            bot_self_id=ev.bot_self_id,
+        )
+        for d in details
+    ]
     phantom_tasks = [_safe_phantom_icon(d) for d in details]
     fetter_tasks = [_safe_fetter_icon(d.set) for d in details]
     avatars, phantom_icons, fetter_icons = await asyncio.gather(

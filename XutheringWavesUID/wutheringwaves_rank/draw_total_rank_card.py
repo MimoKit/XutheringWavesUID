@@ -143,7 +143,15 @@ async def draw_total_rank(bot: Bot, ev: Event, pages: int) -> Union[str, bytes]:
 
     # 获取头像
     details = rankInfoList.data.score_details
-    tasks = [get_avatar(detail.user_id, getattr(detail, "sender_avatar", "")) for detail in details]
+    tasks = [
+        get_avatar(
+            detail.user_id,
+            getattr(detail, "sender_avatar", ""),
+            bot_id=ev.bot_id,
+            bot_self_id=ev.bot_self_id,
+        )
+        for detail in details
+    ]
     results = await asyncio.gather(*tasks)
 
     # 预取所有角色头像（按 detail 顺序 → top10 sorted）
