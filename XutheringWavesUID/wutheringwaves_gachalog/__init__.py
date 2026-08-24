@@ -459,9 +459,9 @@ async def send_gacha_log_card_info(bot: Bot, ev: Event):
 @sv_gacha_help_log.on_fullmatch("抽卡帮助")
 async def send_gacha_log_help(bot: Bot, ev: Event):
     card_img, link_text = await draw_card_help()
-    # 图片与链接分两条发送：链接带在图文同一条里容易被平台判定风险
+    # 图片与链接分两条发送：链接使用 Markdown 超链接格式隐藏真实 URL
     await bot.send(card_img)
-    await bot.send(link_text)
+    await bot.send(MessageSegment.markdown(link_text))
 
 
 @sv_import_gacha_log.on_file("json", prefix=False)

@@ -142,11 +142,11 @@ async def send_login(bot: Bot, ev: Event, url, refresh_panel: bool = True):
         if WutheringWavesConfig.get_config("WavesLoginForward").data:
             if not ev.group_id and ev.bot_id == "onebot":
                 # 私聊+onebot 不转发
-                await bot.send("\n".join(im))
+                await bot.send(MessageSegment.markdown("\n".join(im)))
             else:
-                await bot.send(MessageSegment.node(im))
+                await bot.send(MessageSegment.node(MessageSegment.markdown("\n".join(im))))
         else:
-            await bot.send("\n".join(im), at_sender=at_sender)
+            await bot.send(MessageSegment.markdown("\n".join(im)), at_sender=at_sender)
 
 
 async def page_login_local(bot: Bot, ev: Event, url):
