@@ -63,6 +63,17 @@ CONFIG_DEFAULT: Dict[str, GSC] = {
         "外置登录服务请关闭；自己穿透或 VPS 反代请打开",
         False,
     ),
+    "WavesLoginUrlBackup": GsStrConfig(
+        "鸣潮备用登录url",
+        "主登录服务不可用时的备用地址，通过「登录备用」指令获取；留空则该指令提示未配置",
+        "",
+        secret=True,
+    ),
+    "WavesLoginUrlBackupSelf": GsBoolConfig(
+        "强制【鸣潮备用登录url】为自己的域名",
+        "备用地址为外置登录服务请关闭；自己穿透或 VPS 反代请打开",
+        False,
+    ),
     "WavesTencentWord": GsBoolConfig(
         "登录链接用腾讯文档重定向",
         "登录链接用腾讯文档重定向",

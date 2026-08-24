@@ -105,75 +105,171 @@ def get_level_from_list(ast: int, lst: List) -> int:
     return level
 
 
+# 抽卡帮助配色：浅米底 + 深灰字，长文阅读比深色背景省力
+_HELP_BG_TOP = (250, 247, 240, 255)      # 顶部米白
+_HELP_BG_BOTTOM = (236, 232, 224, 255)   # 底部浅暖灰
+_HELP_HEAD_BG = (243, 238, 228, 255)     # 标题区底色
+_HELP_ACCENT = (198, 152, 62, 255)       # 强调金，承接原 GOLD 但压低亮度以适配浅底
+_HELP_TITLE = (58, 52, 44, 255)          # 主标题
+_HELP_HEAD_TEXT = (150, 108, 32, 255)    # 小节标题
+_HELP_BODY_TEXT = (52, 50, 48, 255)      # 正文
+_HELP_SUB_TEXT = (118, 114, 108, 255)    # 说明行
+
+# 抽卡帮助中出现的链接，图片内用「链接1/2」引用，正文单独发送避免被平台吞图
+GACHA_HELP_LINKS: List[str] = [
+    "https://ga.loping151.site",
+    "https://ww3.loping151.cn/XutheringWavesUID/resource/gacha/gacha-helper.zip",
+]
+
+# 帮助图内容：(小节标题, [(缩进级别, 文本), ...])
+# 缩进级别 0 为条目，1 为条目下的说明行
+_HELP_SECTIONS: List[tuple] = [
+    (
+        "如何导入抽卡记录",
+        [
+            (0, f"1. 使用【{PREFIX}抽卡登录】登录一次后，可直接刷新抽卡数据"),
+            (0, f"2. 传统方法：【{PREFIX}导入抽卡链接 + 复制的内容】"),
+            (1, "抽卡链接具有有效期，请尽快导入"),
+            (0, "3. 导入有效数据后，可从工坊 / 小黑盒补充较旧记录"),
+            (1, "需先用任意方式更新最近 180 天记录"),
+            (1, "两段历史不相交会标记断档，并从断点重算保底"),
+            (1, "无法可靠对齐或区间冲突时拒绝合并，不覆盖原记录"),
+            (1, f"{PREFIX}导入工坊抽卡记录UID（9 位特征码）"),
+            (1, f"{PREFIX}导入小黑盒抽卡记录ID（8 位小黑盒 ID）"),
+            (0, "4. 文件导入：私聊发送 json 文件"),
+        ],
+    ),
+    (
+        "网页获取方式",
+        [
+            (0, "1. 复制【链接1】到浏览器打开"),
+            (0, "2. 登录后依次点击 `刷新记录`、`复制记录`"),
+        ],
+    ),
+    (
+        "PC 获取方式",
+        [
+            (0, "1. 打开游戏抽卡界面，点开唤取记录并确认显示了目标记录"),
+            (0, "2. 下载抽卡助手【链接2】"),
+            (0, "3. 点击获取抽卡记录链接"),
+        ],
+    ),
+    (
+        "安卓手机获取方式",
+        [
+            (0, "1. 打开游戏抽卡界面"),
+            (0, "2. 关闭网络或打开飞行模式"),
+            (0, "3. 点开唤取记录"),
+            (0, "4. 长按左上角区域，全选，复制"),
+        ],
+    ),
+    (
+        "苹果手机获取方式",
+        [
+            (0, "1. 使用 Stream 抓包（详细教程网上搜索）"),
+            (0, "2. 关键字搜索 [game2] 的请求"),
+            (0, "3. 点击 `请求`"),
+            (0, "4. 点击最下方 `查看JSON`，全选，复制"),
+            (1, "国服域名：gmserver-api.aki-game2.com"),
+            (1, "国际服域名：gmserver-api.aki-game2.net"),
+        ],
+    ),
+    (
+        "微信小程序编辑抽卡记录",
+        [
+            (0, "搜索微信小程序：【XWUID】"),
+            (0, "从机器人导入记录后，在小程序内用文件导入"),
+            (1, "编辑完成后导出文件，再重新导入到机器人"),
+        ],
+    ),
+]
+
+
+@to_thread
+def _draw_card_help_img() -> Image.Image:
+    """把抽卡帮助绘制成单张图片，替代原先的多条合并转发。"""
+    width = 780
+    pad_x = 40
+    title_h = 96
+    section_gap = 26
+    head_h = 44
+    line_h = 30
+    sub_line_h = 27
+    footer_h = 60
+
+    # 先量高度
+    height = title_h
+    for _, lines in _HELP_SECTIONS:
+        height += head_h
+        for level, _text in lines:
+            height += sub_line_h if level else line_h
+        height += section_gap
+    height += footer_h
+
+    # 自绘浅色背景：米白到浅暖灰的纵向渐变，避免纯白刺眼
+    img = Image.new("RGBA", (width, height), _HELP_BG_TOP)
+    draw = ImageDraw.Draw(img)
+    for row in range(height):
+        ratio = row / max(height - 1, 1)
+        draw.line(
+            (0, row, width, row),
+            fill=tuple(
+                int(a + (b - a) * ratio)
+                for a, b in zip(_HELP_BG_TOP, _HELP_BG_BOTTOM)
+            ),
+        )
+
+    # 标题区底色稍深，和正文分层
+    draw.rectangle((0, 0, width, title_h - 12), fill=_HELP_HEAD_BG)
+    draw.line((0, title_h - 12, width, title_h - 12), fill=_HELP_ACCENT, width=3)
+
+    draw.text((width // 2, 42), "抽卡记录导入帮助", _HELP_TITLE, waves_font_40, "mm")
+    draw.text(
+        (width // 2, 74),
+        "链接内容见下方单独消息",
+        _HELP_SUB_TEXT,
+        waves_font_20,
+        "mm",
+    )
+
+    y = title_h
+    for head, lines in _HELP_SECTIONS:
+        # 小节标题：左侧竖条 + 文字
+        draw.rectangle((pad_x, y + 10, pad_x + 5, y + 32), fill=_HELP_ACCENT)
+        draw.text((pad_x + 18, y + 21), head, _HELP_HEAD_TEXT, waves_font_25, "lm")
+        y += head_h
+
+        for level, text in lines:
+            if level:
+                draw.text(
+                    (pad_x + 34, y + sub_line_h // 2),
+                    f"· {text}",
+                    _HELP_SUB_TEXT,
+                    waves_font_18,
+                    "lm",
+                )
+                y += sub_line_h
+            else:
+                draw.text(
+                    (pad_x + 16, y + line_h // 2),
+                    text,
+                    _HELP_BODY_TEXT,
+                    waves_font_20,
+                    "lm",
+                )
+                y += line_h
+        y += section_gap
+
+    return img
+
+
 async def draw_card_help():
-    text = "\n".join(
-        [
-            "如何导入抽卡记录",
-            f"1. 使用命令【{PREFIX}抽卡登录】登录一次后，可直接刷新抽卡数据",
-            "",
-            f"2. 传统方法：使用命令【{PREFIX}导入抽卡链接 + 你复制的内容】即可开始进行抽卡分析",
-            "抽卡链接具有有效期，请在有效期内尽快导入",
-            "",
-            "3. 导入有效数据后，可以从工坊/小黑盒补充较旧抽卡数据",
-            "工坊/小黑盒导入：",
-            "要求先使用任意方式更新最近180天记录后，",
-            "官方链接/文件的两段历史若不相交，会标记断档并从断点重算保底；",
-            "工坊/小黑盒无法可靠对齐，或覆盖区间冲突时会拒绝合并，不覆盖原记录。",
-            f"{PREFIX}导入工坊抽卡记录UID（9位特征码）",
-            f"{PREFIX}导入小黑盒抽卡记录ID（8位小黑盒ID）",
-            "",
-            f"4. 文件导入：请尝试私聊发送json文件",
-            "",
-            "以下为传统方法的链接/记录获取方式",
-        ]
-    )
+    """返回 [图片, Markdown超链接]，以蓝色文字超链接形式发送，隐藏真实URL。"""
+    img = await _draw_card_help_img()
+    card_img = await convert_img(img)
 
-    yun = "\n".join(
-        [
-            "网页获取方式",
-            "1.复制以下链接到浏览器打开",
-            "https://ga.loping151.site",
-            "2.登录后,依次点击`刷新记录`,`复制记录`按钮",
-        ]
-    )
-
-    pc = "\n".join(
-        [
-            "PC获取方式",
-            "1.打开游戏抽卡界面，点开唤取记录后确保显示了想要导入的记录",
-            "2.下载抽卡助手：https://ww3.loping151.cn/XutheringWavesUID/resource/gacha/gacha-helper.zip",
-            "3.点击获取抽卡记录链接",
-        ]
-    )
-
-    mobile = "\n".join(
-        [
-            "安卓手机获取链接方式",
-            "1.打开游戏抽卡界面",
-            "2.关闭网络或打开飞行模式",
-            "3.点开换取记录",
-            "4.长按左上角区域，全选，复制",
-            "",
-            "苹果手机获取方式",
-            "1.使用Stream抓包（详细教程网上搜索）",
-            "2.关键字搜索:[game2]的请求",
-            "3.点击`请求`",
-            "4.点击最下方的`查看JSON`，全选，复制",
-            "国服域名：[gmserver-api.aki-game2.com]",
-            "国际服域名：[gmserver-api.aki-game2.net]"
-        ]
-    )
-
-    wechat = "\n".join(
-        [
-            "微信小程序编辑抽卡记录：",
-            "搜索微信小程序：【XWUID】",
-            "从机器人导入抽卡记录后，在小程序中使用文件导入抽卡记录，完成编辑后导出文件，并重新导入到机器人中",
-        ]
-    )
-
-    msg = [text, yun, pc, mobile, wechat]
-    return msg
+    link_md = "[链接1](https://ga.loping151.site) | [链接2](https://ww3.loping151.cn/XutheringWavesUID/resource/gacha/gacha-helper.zip)"
+    return [card_img, link_md]
 
 
 def _compute_pool_stats(gachalogs: Dict) -> Dict:

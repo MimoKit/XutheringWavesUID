@@ -7,7 +7,7 @@ from gsuid_core.models import Event
 
 from .email_login import email_login_entry
 from .cloud_login import cloud_login_entry
-from .login import code_login, page_login
+from .login import code_login, page_login, page_login_backup
 from ..wutheringwaves_config import PREFIX
 
 sv_kuro_login = SV("街区登录")
@@ -47,6 +47,19 @@ async def get_login_msg(bot: Bot, ev: Event):
         (" " if at_sender else "") + msg,
         at_sender=at_sender,
     )
+
+
+@sv_kuro_login.on_fullmatch(
+    ("登录备用", "备用登录", "登陆备用", "备用登陆"),
+    block=True,
+)
+async def get_backup_login_msg(bot: Bot, ev: Event):
+    """主登录服务不可用时，走控制台配置的备用地址。"""
+    logger.info(
+        f"[鸣潮·登录] backup_login user_id={ev.user_id} bot_id={ev.bot_id} "
+        f"group_id={ev.group_id}"
+    )
+    return await page_login_backup(bot, ev)
 
 
 @sv_email_login.on_fullmatch(("邮箱登录", "国际服登录"), block=True)

@@ -44,6 +44,19 @@ game_title = "[鸣潮]"
 msg_error = f"{game_title} 登录失败\n1.是否注册过库街区\n2.库街区能否查询当前鸣潮特征码数据"
 
 
+async def get_backup_url() -> tuple[str, bool] | None:
+    """备用登录地址，未配置时返回 None。"""
+    url = WutheringWavesConfig.get_config("WavesLoginUrlBackup").data
+    if not url:
+        return None
+    if not url.startswith("http"):
+        url = f"https://{url}"
+    return (
+        url.rstrip("/"),
+        WutheringWavesConfig.get_config("WavesLoginUrlBackupSelf").data,
+    )
+
+
 async def get_url() -> tuple[str, bool]:
     url = WutheringWavesConfig.get_config("WavesLoginUrl").data
     if url:
@@ -114,11 +127,16 @@ async def send_login(bot: Bot, ev: Event, url, refresh_panel: bool = True):
     else:
         if WutheringWavesConfig.get_config("WavesTencentWord").data:
             url = f"https://docs.qq.com/scenario/link.html?url={url}"
+
+        login_link_md = f"[点击登录]({url})"
+        backup_cmd_btn = (
+            '<qqbot-cmd-input text="ww备用登录" show="备用登录" reference="false" />'
+        )
         im = [
             f"{game_title} 您的id为【{ev.user_id}】",
             *(["完成后将刷新全部面板，无需立即刷新"] if refresh_panel else []),
-            f" {url}" if WutheringWavesConfig.get_config("WavesLoginForward").data else url,
-            "3分钟内有效",
+            f"> 🔗 {login_link_md} （3分钟内有效）",
+            f"> 无法打开链接？ {backup_cmd_btn}",
         ]
 
         if WutheringWavesConfig.get_config("WavesLoginForward").data:
@@ -262,6 +280,27 @@ async def page_login(bot: Bot, ev: Event):
     url, is_local = await get_url()
     logger.debug(
         f"[鸣潮·登录] page_login user_id={ev.user_id} url={url} is_local={is_local}"
+    )
+
+    if is_local:
+        return await page_login_local(bot, ev, url)
+    else:
+        return await page_login_other(bot, ev, url)
+
+
+async def page_login_backup(bot: Bot, ev: Event):
+    """走备用登录服务，主服务不可用时使用。"""
+    at_sender = True if ev.group_id else False
+    backup = await get_backup_url()
+    if backup is None:
+        return await bot.send(
+            f"{game_title} 未配置备用登录地址\n请让机器人主人在控制台填写【鸣潮备用登录url】",
+            at_sender=at_sender,
+        )
+
+    url, is_local = backup
+    logger.info(
+        f"[鸣潮·登录] page_login_backup user_id={ev.user_id} url={url} is_local={is_local}"
     )
 
     if is_local:
