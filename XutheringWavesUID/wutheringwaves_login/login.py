@@ -98,6 +98,36 @@ def evict_user_login(user_id: str) -> int:
     )
 
 
+def is_markdown_supported(ev: Event, bot: Bot | None = None) -> bool:
+    """判断当前触发平台是否支持 QQ 官方原生 Markdown 与命令小按键"""
+    bot_id = str(
+        getattr(ev, "bot_id", "")
+        or (getattr(bot, "bot_id", "") if bot else "")
+        or ""
+    ).lower()
+    real_bot_id = str(getattr(ev, "real_bot_id", "") or "").lower()
+    ws_bot_id = str(getattr(ev, "WS_BOT_ID", "") or "").lower()
+
+    # 个人号 (onebot, yunzai, llbot, napcat 等) 不支持 QQ 官方 Markdown
+    if any(
+        k in bot_id
+        for k in ("onebot", "yunzai", "llbot", "shamrock", "lagrange", "chronocat")
+    ):
+        return False
+    if any(k in real_bot_id for k in ("onebot", "yunzai", "llbot", "shamrock")):
+        return False
+
+    # 官方机器人 (qqgroup, qqguild, NoneBot2, qq_official) 支持 Markdown
+    if bot_id in ("qqgroup", "qqguild", "nonebot2", "qq_official", "qqguild_direct"):
+        return True
+    if real_bot_id in ("qqgroup", "qqguild", "nonebot2", "qq_official"):
+        return True
+    if ws_bot_id in ("nonebot2",):
+        return True
+
+    return False
+
+
 async def send_login(bot: Bot, ev: Event, url, refresh_panel: bool = True):
     at_sender = True if ev.group_id else False
 
@@ -128,25 +158,37 @@ async def send_login(bot: Bot, ev: Event, url, refresh_panel: bool = True):
         if WutheringWavesConfig.get_config("WavesTencentWord").data:
             url = f"https://docs.qq.com/scenario/link.html?url={url}"
 
-        login_link_md = f"[点击登录]({url})"
-        backup_cmd_btn = (
-            '<qqbot-cmd-input text="ww备用登录" show="备用登录" reference="false" />'
-        )
-        im = [
-            f"{game_title} 您的id为【{ev.user_id}】",
-            *(["完成后将刷新全部面板，无需立即刷新"] if refresh_panel else []),
-            f"> 🔗 {login_link_md} （3分钟内有效）",
-            f"> 无法打开链接？ {backup_cmd_btn}",
-        ]
+        if is_markdown_supported(ev, bot):
+            # 官方机器人：发送原生 Markdown 超链接与小按键（去除 Emoji）
+            login_link_md = f"[点击登录]({url})"
+            backup_cmd_btn = (
+                '<qqbot-cmd-input text="ww备用登录" show="备用登录" reference="false" />'
+            )
+            im_md = [
+                f"{game_title} 您的id为【{ev.user_id}】",
+                *(["完成后将刷新全部面板，无需立即刷新"] if refresh_panel else []),
+                f"> {login_link_md} （3分钟内有效）",
+                f"> 无法打开链接？ {backup_cmd_btn}",
+            ]
+            msg_to_send = MessageSegment.markdown("\n".join(im_md))
+        else:
+            # 个人号 / OneBot：发送纯文本明文链接，兼容普通客户端点击（去除 Emoji）
+            im_text = [
+                f"{game_title} 您的id为【{ev.user_id}】",
+                *(["完成后将刷新全部面板，无需立即刷新"] if refresh_panel else []),
+                f"登录链接（3分钟内有效）：\n{url}",
+                f"无法打开链接请发送【{PREFIX}备用登录】",
+            ]
+            msg_to_send = "\n".join(im_text)
 
         if WutheringWavesConfig.get_config("WavesLoginForward").data:
             if not ev.group_id and ev.bot_id == "onebot":
                 # 私聊+onebot 不转发
-                await bot.send(MessageSegment.markdown("\n".join(im)))
+                await bot.send(msg_to_send)
             else:
-                await bot.send(MessageSegment.node(MessageSegment.markdown("\n".join(im))))
+                await bot.send(MessageSegment.node(msg_to_send))
         else:
-            await bot.send(MessageSegment.markdown("\n".join(im)), at_sender=at_sender)
+            await bot.send(msg_to_send, at_sender=at_sender)
 
 
 async def page_login_local(bot: Bot, ev: Event, url):

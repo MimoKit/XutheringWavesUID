@@ -10,7 +10,9 @@ from PIL import Image, ImageDraw, ImageFilter
 warnings.filterwarnings('ignore', category=Image.DecompressionBombWarning)
 
 from gsuid_core.pool import to_thread
+from gsuid_core.bot import Bot
 from gsuid_core.models import Event
+from gsuid_core.segment import MessageSegment
 from gsuid_core.utils.image.convert import convert_img
 from gsuid_core.utils.image.image_tools import crop_center_img
 
@@ -263,13 +265,54 @@ def _draw_card_help_img() -> Image.Image:
     return img
 
 
-async def draw_card_help():
-    """返回 [图片, Markdown超链接]，以蓝色文字超链接形式发送，隐藏真实URL。"""
+def is_markdown_supported(ev: Event | None = None, bot: Bot | None = None) -> bool:
+    """判断当前触发平台是否支持 QQ 官方原生 Markdown"""
+    if not ev and not bot:
+        return False
+    bot_id = str(
+        getattr(ev, "bot_id", "")
+        or (getattr(bot, "bot_id", "") if bot else "")
+        or ""
+    ).lower()
+    real_bot_id = str(getattr(ev, "real_bot_id", "") or "").lower()
+    ws_bot_id = str(getattr(ev, "WS_BOT_ID", "") or "").lower()
+
+    if any(
+        k in bot_id
+        for k in ("onebot", "yunzai", "llbot", "shamrock", "lagrange", "chronocat")
+    ):
+        return False
+    if any(k in real_bot_id for k in ("onebot", "yunzai", "llbot", "shamrock")):
+        return False
+
+    if bot_id in ("qqgroup", "qqguild", "nonebot2", "qq_official", "qqguild_direct"):
+        return True
+    if real_bot_id in ("qqgroup", "qqguild", "nonebot2", "qq_official"):
+        return True
+    if ws_bot_id in ("nonebot2",):
+        return True
+
+    return False
+
+
+async def draw_card_help(ev: Event | None = None, bot: Bot | None = None):
+    """返回 [图片, 链接消息]（自动适配官方机器人 Markdown 与个人号纯文本）"""
     img = await _draw_card_help_img()
     card_img = await convert_img(img)
 
-    link_md = "[链接1](https://ga.loping151.site) | [链接2](https://ww3.loping151.cn/XutheringWavesUID/resource/gacha/gacha-helper.zip)"
-    return [card_img, link_md]
+    if is_markdown_supported(ev, bot):
+        link_msg = MessageSegment.markdown(
+            "[链接1](https://ga.loping151.site) | [链接2](https://ww3.loping151.cn/XutheringWavesUID/resource/gacha/gacha-helper.zip)"
+        )
+    else:
+        link_lines = [
+            "抽卡帮助中的链接：",
+            "链接1：https://ga.loping151.site",
+            "链接2：https://ww3.loping151.cn/XutheringWavesUID/resource/gacha/gacha-helper.zip",
+        ]
+        link_msg = "\n".join(link_lines)
+
+    return [card_img, link_msg]
 
 
 def _compute_pool_stats(gachalogs: Dict) -> Dict:
