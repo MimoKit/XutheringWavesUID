@@ -17,6 +17,7 @@ from gsuid_core.utils.image.convert import convert_img
 from gsuid_core.utils.download_resource.download_file import download
 
 from ..utils.image import compress_to_webp
+from ..utils.pile_offset import delete_rank_offset, move_rank_offset
 from ..wutheringwaves_config import WutheringWavesConfig
 from ..utils.name_convert import easy_id_to_name
 from ..utils.resource.RESOURCE_PATH import CUSTOM_CARD_PATH, CUSTOM_ORB_PATH
@@ -27,6 +28,7 @@ from .card_utils import (
     CUSTOM_PATH_NAME_MAP,
     cv2 as _cv2,
     delete_orb_cache,
+    duplicates_for_single,
     find_duplicates_for_new_images,
     get_char_id_and_name,
     get_image,
@@ -34,6 +36,9 @@ from .card_utils import (
     ORB_BLOCK_THRESHOLD,
     update_orb_cache,
 )
+
+# 与待审核图比对的阈值, 同 panel_editor.routes._PENDING_DUP_THRESHOLD
+PENDING_DUP_THRESHOLD = 0.95
 
 
 def check_image_dimensions(temp_path: Path, target_type: str, index: int) -> Optional[str]:
@@ -64,6 +69,40 @@ def collect_blocked_duplicates(
         top_id = get_hash_id(top_path.name)
         if top_sim >= ORB_BLOCK_THRESHOLD:
             block_msgs.append(f"第{index}张和已有id {top_id} 重复")
+            blocked_paths.add(new_path)
+    return block_msgs, blocked_paths
+
+
+def collect_pending_duplicates(
+    target_type: str,
+    char_id: str,
+    new_images: List[Path],
+    skip: Optional[Set[Path]] = None,
+) -> Tuple[List[str], Set[Path]]:
+    """与待审核区比对, 命中即拦; 同一张图不必重复转交主人。
+
+    pending 图不在 CUSTOM_DIRS 下, 需 as_type 指定类型做同尺度 ORB 预处理。
+    """
+    try:
+        from ..wutheringwaves_resource.panel_editor.storage import PANEL_EDIT_PENDING
+    except Exception as e:
+        logger.warning(f"[鸣潮·卡片上传] 待审核查重不可用: {e}")
+        return [], set()
+
+    pending_dir = PANEL_EDIT_PENDING / target_type / str(char_id)
+    if not pending_dir.is_dir():
+        return [], set()
+
+    block_msgs: List[str] = []
+    blocked_paths: Set[Path] = set()
+    for index, new_path in enumerate(new_images, start=1):
+        if skip and new_path in skip:
+            continue
+        dup_list = duplicates_for_single(
+            pending_dir, new_path, PENDING_DUP_THRESHOLD, as_type=target_type
+        )
+        if dup_list:
+            block_msgs.append(f"第{index}张已在待审核队列中")
             blocked_paths.add(new_path)
     return block_msgs, blocked_paths
 
@@ -221,6 +260,7 @@ async def delete_custom_card(bot: Bot, ev: Event, char: str, hash_id: str, targe
             try:
                 target_file = files_map[single_hash_id]
                 target_file.unlink()
+                delete_rank_offset(target_file)
                 delete_orb_cache(target_file)
                 card_hash_index.remove(target_type, char_id, target_file)
                 deleted_ids.append(single_hash_id)
@@ -307,6 +347,7 @@ async def compress_all_custom_card(bot: Bot, ev: Event):
                 try:
                     delete_orb_cache(img_path)
                     img_path.rename(new_path)
+                    move_rank_offset(img_path, new_path)
                     if new_path.suffix.lower() == ".webp":
                         update_orb_cache(new_path)
                     rename_count += 1

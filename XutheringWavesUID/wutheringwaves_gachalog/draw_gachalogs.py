@@ -302,13 +302,13 @@ async def draw_card_help(ev: Event | None = None, bot: Bot | None = None):
 
     if is_markdown_supported(ev, bot):
         link_msg = MessageSegment.markdown(
-            "[链接1](https://ga.loping151.site) | [链接2](https://ww3.loping151.cn/XutheringWavesUID/resource/gacha/gacha-helper.zip)"
+            "[链接1](https://ga.loping151.site) | [链接2](https://cnb.cool/loping151/XutheringWavesUID-Resources/-/git/raw/main/XutheringWavesUID/resource/gacha/gacha-helper.zip)"
         )
     else:
         link_lines = [
             "抽卡帮助中的链接：",
             "链接1：https://ga.loping151.site",
-            "链接2：https://ww3.loping151.cn/XutheringWavesUID/resource/gacha/gacha-helper.zip",
+            "链接2：https://cnb.cool/loping151/XutheringWavesUID-Resources/-/git/raw/main/XutheringWavesUID/resource/gacha/gacha-helper.zip",
         ]
         link_msg = "\n".join(link_lines)
 
