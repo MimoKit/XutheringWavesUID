@@ -6,7 +6,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from PIL import Image, ImageChops
+from PIL import Image
 from gsuid_core.logger import logger
 from gsuid_core.pool import to_thread
 
@@ -42,6 +42,7 @@ from gsuid_core.models import Event
 from gsuid_core.segment import MessageSegment
 from gsuid_core.utils.image.convert import convert_img
 
+from ..utils.image_meta import CacheFingerprint, crop_image, read_crop
 from ..utils.name_convert import alias_to_char_name, char_name_to_char_id, easy_id_to_name
 from ..utils.resource.constant import SPECIAL_CHAR, SPECIAL_CHAR_ID
 from ..utils.resource.RESOURCE_PATH import (
@@ -78,7 +79,7 @@ def _listing_char_name(char_id) -> str:
 
 def get_char_id_and_name(char: str) -> tuple[Optional[str], str, str]:
     char_id = None
-    msg = f"[鸣潮] 角色名无法找到, 可能暂未适配, 请先检查输入是否正确！"
+    msg = "[鸣潮] 角色名无法找到, 可能暂未适配, 请先检查输入是否正确！"
     sex = ""
     if "男" in char:
         char = char.replace("男", "")
@@ -292,9 +293,6 @@ def _shorten_rel_path(path: Path) -> str:
     return rel
 
 
-# 改了 _compute_orb_features 的预处理流程就 +1, 旧 .npz 当 miss 重算。
-ORB_FEATURE_VERSION = 2
-
 # role_pile 在主面板上的偏移 (25, 170) 与 CROP_PORTRAIT (85, 265, 525, 1070)
 # 决定可见区在 role_pile 局部坐标 = (60, 95, 500, 900)。
 _PANEL_VISIBLE_BOX_LOCAL = (60, 95, 500, 900)
@@ -371,14 +369,8 @@ def _load_orb_cache(image_path: Path):
     if not cache_path or not cache_path.exists():
         return None
     try:
-        if cache_path.stat().st_mtime < image_path.stat().st_mtime:
-            return None
-    except FileNotFoundError:
-        return None
-    try:
         data = np.load(cache_path)
-        version = int(data["version"][0]) if "version" in data.files else 1
-        if version != ORB_FEATURE_VERSION:
+        if str(data["fingerprint"][0]) != _orb_fingerprint(image_path):
             return None
         pts = data["pts"]
         des = data["des"]
@@ -395,7 +387,10 @@ def _save_orb_cache(image_path: Path, pts, des) -> None:
         return
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
-        cache_path, pts=pts, des=des, version=np.array([ORB_FEATURE_VERSION])
+        cache_path,
+        pts=pts,
+        des=des,
+        fingerprint=np.array([_orb_fingerprint(image_path)]),
     )
 
 
@@ -417,7 +412,7 @@ def _compute_orb_features(image_path: Path, t: Optional[str] = None):
         try:
             with Image.open(image_path) as im:
                 im.load()
-                prepared = _prepare_card_image_for_orb(im)
+                prepared = _prepare_card_image_for_orb(crop_image(im, read_crop(image_path)))
         except Exception:
             return None
         rgb = np.array(prepared)
@@ -432,6 +427,17 @@ def _compute_orb_features(image_path: Path, t: Optional[str] = None):
         return None
     pts = np.float32([kp.pt for kp in keypoints])
     return pts, descriptors
+
+
+_orb_fingerprint = CacheFingerprint(
+    _compute_orb_features,
+    _prepare_card_image_for_orb,
+    resize_and_center_image,
+    crop_image,
+    _PANEL_VISIBLE_BOX_LOCAL,
+    ORB_FEATURES,
+    getattr(cv2, "__version__", None),
+)
 
 
 def get_orb_features(image_path: Path, t: Optional[str] = None):
@@ -701,68 +707,34 @@ async def send_repeated_custom_cards(
         await bot.send(batch)
 
 
-def _trim_white_border_pil(image: Image.Image, tol: int = 35) -> Image.Image:
-    # 与 numpy 路径同口径 (最小通道<255-tol→getbbox)
-    rgba = image.convert("RGBA")
-    bg = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
-    r, g, b = Image.alpha_composite(bg, rgba).convert("RGB").split()
-    min_ch = ImageChops.darker(ImageChops.darker(r, g), b)
-    content = min_ch.point(lambda p: 255 if p < 255 - tol else 0)
-    bbox = content.getbbox()
-    return image.crop(bbox) if bbox else image
-
-
-def _trim_white_border(image: Image.Image, tol: int = 35, ratio: float = 0.995) -> Image.Image:
-    """逐边剥离整行/整列近白(各通道≥255-tol)或全透明的边; ratio 容忍稀疏杂点。"""
-    if np is None:
-        return _trim_white_border_pil(image, tol)
-    arr = np.asarray(image.convert("RGBA"))
-    white = np.all(arr[:, :, :3].astype(np.int16) >= 255 - tol, axis=2) | (arr[:, :, 3] == 0)
-    H, W = white.shape
-    row_white = white.mean(axis=1) >= ratio
-    col_white = white.mean(axis=0) >= ratio
-    top = 0
-    while top < H and row_white[top]:
-        top += 1
-    bottom = H
-    while bottom > top and row_white[bottom - 1]:
-        bottom -= 1
-    left = 0
-    while left < W and col_white[left]:
-        left += 1
-    right = W
-    while right > left and col_white[right - 1]:
-        right -= 1
-    if right <= left or bottom <= top:
-        return image
-    return image.crop((left, top, right, bottom))
-
-
 @to_thread
-def _trim_card_file(path: Path) -> Optional[Image.Image]:
+def _crop_card_file(path: Path) -> Optional[Image.Image]:
+    crop = read_crop(path)
+    if crop is None:
+        return None
     try:
         with Image.open(path) as im:
             im.load()
-            return _trim_white_border(im)
+            return crop_image(im, crop)
     except Exception:
         return None
 
 
-async def _one_card_img(t: str, path: Path):
-    trimmed = await _trim_card_file(path) if t == "card" else None
-    return await convert_img(trimmed if trimmed is not None else path)
+async def _one_card_img(t: str, path: Path) -> str:
+    cropped = await _crop_card_file(path)
+    return await convert_img(cropped if cropped is not None else path, is_base64=True)
 
 
 async def _send_found_matches(bot: Bot, matches) -> None:
     """命中非空: 单张直接发; 多张走转发消息 (来源「xx角色的xx图」+ 图)。"""
     if len(matches) == 1:
-        t, _cid, path = matches[0]
-        return await bot.send(await _one_card_img(t, path))
+        _t, _cid, path = matches[0]
+        return await bot.send(await convert_img(path))
     imgs = []
     for t, other_char_id, path in matches:
         type_name = CUSTOM_PATH_NAME_MAP.get(t, t)
         imgs.append(f"{_listing_char_name(other_char_id)}的{type_name}图")
-        imgs.append(await _one_card_img(t, path))
+        imgs.append(await convert_img(path))
     await bot.send(MessageSegment.node(imgs))
 
 
@@ -781,7 +753,7 @@ async def send_custom_card_single(
     type_label = CUSTOM_PATH_NAME_MAP.get(target_type, target_type)
     target = card_hash_index.lookup_in(target_type, char_id, hash_id)
     if target is not None:
-        return await bot.send(await _one_card_img(target_type, target))
+        return await bot.send(await convert_img(target))
 
     matches = card_hash_index.find(hash_id)
     if matches:

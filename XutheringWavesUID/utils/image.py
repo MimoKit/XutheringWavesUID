@@ -25,6 +25,7 @@ from gsuid_core.models import Event
 from gsuid_core.utils.image.utils import sget
 from gsuid_core.utils.image.image_tools import crop_center_img
 
+from .image_meta import open_meta_image
 from .resource.RESOURCE_PATH import (
     AVATAR_PATH,
     CACHE_PATH,
@@ -446,14 +447,14 @@ async def get_random_waves_role_pile(
 ) -> tuple[Image.Image, Optional[Path]]:
     forced = _force_pile_path.get()
     if forced is not None and forced.exists():
-        return Image.open(forced).convert("RGBA"), forced
+        return open_meta_image(forced), forced
     pool = _mr_pool_pile(char_id, force_not_use_custom, _include_official_pile())
     if not pool and char_id:
         # 该角色 custom/官方立绘全缺: 从全库可用立绘里抽
         pool = _mr_pool_pile(None, force_not_use_custom, True)
     if pool:
         full = Path(random.choice(pool))
-        return Image.open(full).convert("RGBA"), full
+        return open_meta_image(full), full
     full = ROLE_PILE_PATH / "role_pile_1503.png"
     return Image.open(full).convert("RGBA"), full
 
@@ -464,11 +465,11 @@ async def get_random_waves_bg(
 ) -> tuple[Image.Image, bool, Optional[Path]]:
     forced = _force_bg_path.get()
     if forced is not None and forced.exists():
-        return Image.open(forced).convert("RGBA"), True, forced
+        return open_meta_image(forced), True, forced
     pool = _mr_pool_bg(char_id, force_not_use_custom, _include_official_bg())
     if pool:
         full = Path(random.choice(pool))
-        return Image.open(full).convert("RGBA"), True, full
+        return open_meta_image(full), True, full
     pile, pile_path = await get_random_waves_role_pile(char_id, force_not_use_custom)
     return pile, False, pile_path
 
@@ -479,7 +480,7 @@ async def get_role_pile(resource_id: Union[int, str], custom: bool = False) -> t
         if os.path.isdir(custom_dir) and len(os.listdir(custom_dir)) > 0:
             path = _random_image_from_dir(custom_dir)
             if path:
-                return True, Image.open(f"{custom_dir}/{path}").convert("RGBA")
+                return True, open_meta_image(Path(custom_dir) / path)
 
     name = f"role_pile_{resource_id}.png"
     path = ROLE_PILE_PATH / name
@@ -493,14 +494,14 @@ async def get_role_pile_with_path(
 ) -> tuple[bool, Image.Image, Optional[Path]]:
     forced = _force_pile_path.get()
     if forced is not None and forced.exists():
-        return True, Image.open(forced).convert("RGBA"), forced
+        return True, open_meta_image(forced), forced
     if custom:
         custom_dir = f"{CUSTOM_CARD_PATH}/{resource_id}"
         if os.path.isdir(custom_dir) and len(os.listdir(custom_dir)) > 0:
             name = _random_image_from_dir(custom_dir)
             if name:
                 path = Path(custom_dir) / name
-                return True, Image.open(path).convert("RGBA"), path
+                return True, open_meta_image(path), path
 
     name = f"role_pile_{resource_id}.png"
     path = ROLE_PILE_PATH / name
@@ -514,14 +515,14 @@ async def get_role_pile_default(
 ) -> tuple[Image.Image, Optional[Path]]:
     forced = _force_pile_path.get()
     if forced is not None and forced.exists():
-        return Image.open(forced).convert("RGBA"), forced
+        return open_meta_image(forced), forced
     if custom:
         custom_dir = f"{CUSTOM_MR_CARD_PATH}/{resource_id}"
         if os.path.isdir(custom_dir) and len(os.listdir(custom_dir)) > 0:
             name = _random_image_from_dir(custom_dir)
             if name:
                 full = Path(custom_dir) / name
-                return Image.open(full).convert("RGBA"), full
+                return open_meta_image(full), full
 
     name = f"role_pile_{resource_id}.png"
     path = ROLE_PILE_PATH / name
@@ -539,6 +540,14 @@ def get_square_avatar_path(resource_id: Union[int, str]) -> Path:
 
 async def get_square_avatar(resource_id: Union[int, str]) -> Image.Image:
     return Image.open(get_square_avatar_path(resource_id)).convert("RGBA")
+
+
+def paste_masked_avatar(canvas: Image.Image, pic: Image.Image, mask_pic: Image.Image, size: int, pos: Tuple[int, int]):
+    """遮罩缩放到 size 贴在 pos, 头像按遮罩圆的实际包围盒自适应缩放后贴入 (完整显示方形头像)。"""
+    mask = mask_pic.resize((size, size))
+    box = mask.getchannel("A").getbbox() or (0, 0, size, size)
+    w, h = box[2] - box[0], box[3] - box[1]
+    canvas.paste(crop_center_img(pic, w, h), (pos[0] + box[0], pos[1] + box[1]), mask.crop(box))
 
 
 async def cropped_square_avatar(item_icon: Image.Image, size: int) -> Image.Image:

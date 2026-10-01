@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import base64
 import time
 from io import BytesIO
 from pathlib import Path
@@ -18,6 +19,7 @@ from gsuid_core.logger import logger
 from gsuid_core.models import Event
 
 from ...utils.image import _force_pile_path
+from ...utils.image_meta import open_meta_image
 from ...utils.name_convert import easy_id_to_name
 from ...utils.pile_offset import RankOffset, clamp_offset, place_rank_pile, read_rank_offset
 
@@ -143,6 +145,55 @@ async def render_panel_preview(char_id: str, image_path: Path) -> Optional[bytes
     return None
 
 
+async def render_panel_layers(char_id: str, image_path: Path) -> Optional[dict]:
+    """只渲染一次固定背景/前景与遮罩, 框选调整由前端 canvas 合成。"""
+    from ...wutheringwaves_charinfo.draw_char_card import draw_char_detail_img
+
+    char_name = easy_id_to_name(char_id, "")
+    if not char_name:
+        return None
+    layers = {}
+    token = _force_pile_path.set(image_path)
+    try:
+        image = await draw_char_detail_img(
+            make_synthetic_event(),
+            "1",
+            char_name,
+            PREVIEW_USER_ID,
+            is_limit_query=True,
+            fallback_to_generic=True,
+            need_convert_img=False,
+            preview_layers=layers,
+        )
+    finally:
+        _force_pile_path.reset(token)
+    if not isinstance(image, Image.Image) or "mask" not in layers:
+        return None
+
+    def data_url(im: Image.Image) -> str:
+        buf = BytesIO()
+        im.save(buf, "PNG")
+        return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+
+    mask = Image.new("RGBA", layers["mask"].size, "white")
+    source_mask = layers["mask"]
+    alpha = (
+        source_mask.getchannel("A")
+        if source_mask.mode == "RGBA"
+        else source_mask.convert("L")
+    )
+    mask.putalpha(alpha)
+    return {
+        "base": data_url(image),
+        "mask": data_url(mask),
+        "foreground": data_url(layers["foreground"]),
+        "x": layers["position"][0],
+        "y": layers["position"][1],
+        "width": image.width,
+        "height": image.height,
+    }
+
+
 # 排行 title 画布与立绘默认贴图位, 与 draw_rank_card 一致; 前端 app.js RANK_CANVAS / RANK_PASTE 同值。
 RANK_CANVAS = (1050, 540)
 RANK_PILE_PASTE = (450, -120)
@@ -199,7 +250,7 @@ def _png_bytes(im: Image.Image) -> bytes:
 async def render_rank_preview(
     char_id: str, image_path: Path, offset: Optional[RankOffset] = None,
 ) -> Optional[bytes]:
-    """渲染角色排行 title 区域的立绘合成预览 (1050x500)。offset 缺省读图片同名 sidecar。"""
+    """渲染角色排行 title 区域的立绘合成预览 (1050x500)。offset 缺省读图片元数据的 rank。"""
     from ...utils.image import get_role_pile_default
 
     token = _force_pile_path.set(image_path)
@@ -241,8 +292,7 @@ def rank_layer_bytes(kind: str, char_id: str = "", pile_path: Optional[Path] = N
         _draw_rank_text(text, _rank_char_name(char_id))
         return _png_bytes(text), "image/png"
     if kind == "pile" and pile_path is not None:
-        with Image.open(pile_path) as im:
-            pile = im.convert("RGBA")
+        pile = open_meta_image(pile_path)
         buf = BytesIO()
         pile.save(buf, "WEBP", quality=85, method=4)
         return buf.getvalue(), "image/webp"
@@ -280,7 +330,7 @@ async def render_mr_preview(
     account_info = AccountBaseInfo.model_validate(_build_sample_account_dict(role_id, char_name))
 
     try:
-        pile = Image.open(image_path).convert("RGBA")
+        pile = open_meta_image(image_path)
     except Exception as e:
         logger.warning(f"[鸣潮·面板编辑] 读取 MR 图失败 {image_path}: {e}")
         return None
