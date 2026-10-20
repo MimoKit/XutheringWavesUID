@@ -13,6 +13,7 @@ from ..utils.char_info_utils import PATTERN
 from ..utils.name_resolve import resolve_char
 from ..utils.name_convert import char_name_to_char_id
 from ..utils.damage.modal import get_modal_key_by_name
+from ..utils.util import use_longest_keyword
 
 sv_waves_phantom_rank = SV("ww声骸排行", priority=2)
 sv_waves_rank_list = SV("ww角色排行", priority=3)
@@ -230,8 +231,11 @@ async def send_phantom_total_rank_card(bot: Bot, ev: Event):
         await bot.send(res.wrap(im, canonical_cmd) if res else im)
 
 
+_SEND_RANK_LIST_CARD_KEYWORDS = ("练度排行", "群练度排行", "练度群排行", "练度群排行榜", "练度排名", "群练度排名", "练度群排名", "ldph", "ldpm")
+
+
 @sv_waves_rank_local_list.on_command(
-    ("练度排行", "群练度排行", "练度群排行", "练度群排行榜", "练度排名", "群练度排名", "练度群排名", "ldph", "ldpm"),
+    _SEND_RANK_LIST_CARD_KEYWORDS,
     block=True,
     to_ai="""查询本群练度排行（按账号综合练度评分），仅群聊可用。
 
@@ -245,6 +249,7 @@ Args:
 """,
 )
 async def send_rank_list_card(bot: Bot, ev: Event):
+    use_longest_keyword(ev, _SEND_RANK_LIST_CARD_KEYWORDS)
     if not ev.group_id:
         return await bot.send("请在群聊中使用")
 

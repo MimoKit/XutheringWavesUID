@@ -341,3 +341,13 @@ def login_platform() -> str:
     # LoginType = WutheringWavesConfig.get_config("WavesLoginTypeNew").data
     # return LoginType if LoginType else "ios"
     return "ios"
+
+
+def use_longest_keyword(ev, keywords: tuple[str, ...]) -> None:
+    """关键词互为前缀时（如 删除 / 删除全部UID），按实际输入改用最长的那个并去掉参数里的残留"""
+    text = ev.text.strip()
+    for k in sorted(keywords, key=len, reverse=True):
+        tail = k[len(ev.command):]
+        if tail and k.startswith(ev.command) and text.startswith(tail):
+            ev.command, ev.text = k, text[len(tail):].strip()
+            return

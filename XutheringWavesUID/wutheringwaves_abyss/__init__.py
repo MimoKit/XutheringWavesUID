@@ -13,6 +13,7 @@ from ..utils.error_reply import WAVES_CODE_103
 from .draw_challenge_card import draw_challenge_img
 from ..utils.database.models import WavesBind
 from .draw_abyss_card import draw_abyss_img
+from ..utils.util import use_longest_keyword
 
 sv_waves_abyss = SV("waves查询深渊")
 sv_waves_challenge = SV("waves查询全息")
@@ -132,23 +133,26 @@ async def send_waves_challenge_info(bot: Bot, ev: Event):
         return await bot.send(im)
 
 
+_SEND_WAVES_SLASH_INFO_KEYWORDS = (
+    "冥海",
+    "mh",
+    "hx",
+    "海墟",
+    "冥歌海墟",
+    "查询冥海",
+    "查询无尽",
+    "查询海墟",
+    "无尽",
+    "wj",
+    "无尽深渊",
+    "禁忌",
+    "禁忌海域",
+    "再生海域",
+)
+
+
 @sv_waves_slash.on_command(
-    (
-        "冥海",
-        "mh",
-        "hx",
-        "海墟",
-        "冥歌海墟",
-        "查询冥海",
-        "查询无尽",
-        "查询海墟",
-        "无尽",
-        "wj",
-        "无尽深渊",
-        "禁忌",
-        "禁忌海域",
-        "再生海域",
-    ),
+    _SEND_WAVES_SLASH_INFO_KEYWORDS,
     block=True,
     to_ai="""查询用户本人在鸣潮「冥歌海墟」（海墟 / 无尽深渊 / 禁忌海域 / 再生海域）的通关记录。
 
@@ -161,6 +165,7 @@ Args:
 """,
 )
 async def send_waves_slash_info(bot: Bot, ev: Event):
+    use_longest_keyword(ev, _SEND_WAVES_SLASH_INFO_KEYWORDS)
     user_id = ruser_id(ev)
     uid = await WavesBind.get_uid_by_game(user_id, ev.bot_id)
     if not uid:
