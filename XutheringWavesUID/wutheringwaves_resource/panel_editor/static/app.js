@@ -758,7 +758,7 @@ function renderCropper(body) {
 }
 
 // 裁剪框贴边时的最小留白(px), 也是 CSS .cropper__canvas-wrap 的初始 padding。
-// 框选超出原图时, 该侧 padding 会按超出量动态增大(见 layoutCropper), 形成"往外拉自动外扩"的白色填充预览。
+// 框选超出原图时, 该侧 padding 会按超出量动态增大(见 layoutCropper), 形成"往外拉自动外扩"的预览。
 const CROP_FRAME = 12;
 
 // 面板(card)图渲染参数: 自定义图经 resize_and_center 以 contain 方式缩放居中进 PANEL_OUT,
@@ -767,6 +767,49 @@ const PANEL_OUT = { w: 560, h: 1000 };
 const PANEL_VIS = { l: 60, t: 95, r: 500, b: 900 };
 // stamina/MR 卡背景容器 (对齐 stamina_card.html .container / 后端 storage._BG_DISPLAY_RATIO)
 const MR_CARD = { w: 1150, h: 850 };
+// MR 立绘贴图位, 对齐 stamina_card.html .char-layer 与 PIL paste
+const MR_PILE_HTML = { top: -90, right: -30 };
+const MR_PILE_PIL = { x: 550, y: -150 };
+
+const MR_RATIO = MR_CARD.w / MR_CARD.h;
+
+function fitRatioRect(r, ratio) {
+  const w = Math.min(r.w, r.h * ratio), h = w / ratio;
+  return { x: r.x + (r.w - w) / 2, y: r.y + (r.h - h) / 2, w, h };
+}
+
+// 内框 = 实际显示区: 面板取可见窗口, 背景取 cover 区; 坐标相对框选左上角
+function visRectInCrop(W, H) {
+  if (state.type === "card") return panelVisibleRectInCrop(W, H);
+  if (state.type === "bg") return fitRatioRect({ x: 0, y: 0, w: W, h: H }, MR_RATIO);
+  return null;
+}
+
+function visRatio() {
+  return state.type === "card" ? (PANEL_VIS.r - PANEL_VIS.l) / (PANEL_VIS.b - PANEL_VIS.t) : MR_RATIO;
+}
+
+// 由内框反推外框, 外框保持比例 R
+function cropFromVis(vx, vy, vw, vh, R) {
+  if (state.type === "bg") {
+    const w = R >= MR_RATIO ? vh * R : vw, h = w / R;
+    return { x: vx - (w - vw) / 2, y: vy - (h - vh) / 2, w, h };
+  }
+  const f = (PANEL_VIS.b - PANEL_VIS.t) / vh;
+  let w, h, pasteX, pasteY;
+  if (R > 1) {
+    w = PANEL_OUT.w / f;
+    h = w / R;
+    pasteX = 0;
+    pasteY = (PANEL_OUT.h - h * f) / 2;
+  } else {
+    h = PANEL_OUT.h / f;
+    w = h * R;
+    pasteX = (PANEL_OUT.w - w * f) / 2;
+    pasteY = 0;
+  }
+  return { x: vx - (PANEL_VIS.l - pasteX) / f, y: vy - (PANEL_VIS.t - pasteY) / f, w, h };
+}
 
 // 缩略图框比例 = 该类型在角色卡的实际显示区比例 (card 取 PANEL_VIS 窗口, bg 取背景容器)
 function tileAspect(type) {
@@ -812,10 +855,11 @@ function lockCropImgSize(img, wrap) {
 function initCropRect(img, wrap) {
   const { w, h } = lockCropImgSize(img, wrap);
   const crop = state.cropTmp?.crop;
-  state.cropRect = crop ? {
+  let r = crop ? {
     x: crop.x * w / img.naturalWidth, y: crop.y * h / img.naturalHeight,
     w: crop.w * w / img.naturalWidth, h: crop.h * h / img.naturalHeight,
   } : { x: 0, y: 0, w, h };
+  state.cropRect = r;
   state.cropClient = { w, h };
   drawCropRect(wrap);
   updateRectReadout();
@@ -826,8 +870,6 @@ function drawCropRect(wrap) {
   wrap.querySelector(".cropper__visbox")?.remove();
   if (!state.cropRect) return;
 
-  const isCard = state.type === "card";
-
   const rect = el("div", { class: "cropper__rect" });
   for (const h_ of ["nw", "n", "ne", "e", "se", "s", "sw", "w"]) {
     rect.append(el("span", { class: `handle h-${h_}`, "data-h": h_ }));
@@ -835,8 +877,9 @@ function drawCropRect(wrap) {
   rect.addEventListener("pointerdown", ev => startDrag(ev, wrap, rect));
   wrap.append(rect);
 
-  if (isCard) {
-    const vis = el("div", { class: "cropper__visbox cropper__visbox--active" });
+  if (state.type === "card" || state.type === "bg") {
+    const inset = state.type === "bg" ? " cropper__visbox--inset" : "";
+    const vis = el("div", { class: `cropper__visbox cropper__visbox--active${inset}` });
     for (const h_ of ["nw", "n", "ne", "e", "se", "s", "sw", "w"]) {
       vis.append(el("span", { class: `handle h-${h_}`, "data-h": h_ }));
     }
@@ -847,13 +890,13 @@ function drawCropRect(wrap) {
   layoutCropper(wrap);
 }
 
-// 统一布局: 按框选超出量动态设置 wrap padding(白色外扩区), 再据此定位裁剪框与可见区引导框。
+// 统一布局: 按框选超出量动态设置 wrap padding, 再据此定位裁剪框与可见区引导框。
 function layoutCropper(wrap) {
   const r = state.cropRect;
   const img = state.cropImgEl;
   if (!wrap || !r || !img) return;
   const iw = img.clientWidth, ih = img.clientHeight;
-  const v = state.type === "card" ? panelVisibleRectInCrop(r.w, r.h) : null;
+  const v = visRectInCrop(r.w, r.h);
   const vMinX = v ? r.x + v.x : Infinity;
   const vMinY = v ? r.y + v.y : Infinity;
   const vMaxX = v ? r.x + v.x + v.w : -Infinity;
@@ -949,7 +992,7 @@ function startDrag(ev, wrap, rect) {
 
   const cleanup = () => {
     rect.removeEventListener("pointermove", move);
-    rect.removeEventListener("pointerup", onUp);
+    rect.removeEventListener("pointerup", cleanup);
     rect.removeEventListener("pointercancel", cleanup);
     try { rect.releasePointerCapture(ev.pointerId); } catch (_) {}
     if (pending != null) {
@@ -957,11 +1000,9 @@ function startDrag(ev, wrap, rect) {
       flush();
     }
   };
-  // 真·释放 → 落库; pointercancel (浏览器取消手势) → 只清监听器, rect 保留位置。
-  const onUp = () => { cleanup(); scheduleAutoCrop(); };
 
   rect.addEventListener("pointermove", move);
-  rect.addEventListener("pointerup", onUp);
+  rect.addEventListener("pointerup", cleanup);
   rect.addEventListener("pointercancel", cleanup);
 }
 
@@ -975,7 +1016,7 @@ function startVisDrag(ev, wrap, visEl) {
   const tmp = state.cropTmp;
   if (!tmp) return;
 
-  const cur = panelVisibleRectInCrop(state.cropRect.w, state.cropRect.h);
+  const cur = visRectInCrop(state.cropRect.w, state.cropRect.h);
   if (!cur) return;
   const start = {
     sx: ev.clientX, sy: ev.clientY,
@@ -984,36 +1025,20 @@ function startVisDrag(ev, wrap, visEl) {
     w: cur.w, h: cur.h,
   };
 
-  const VIS_W = PANEL_VIS.r - PANEL_VIS.l;
-  const VIS_H = PANEL_VIS.b - PANEL_VIS.t;
-  const VIS_RATIO = VIS_W / VIS_H;
+  const VIS_RATIO = visRatio();
   const MIN_VH = 24;
   const R = state.cropRect.w / state.cropRect.h;
 
   const applyVis = (vx, vy, vw, vh) => {
-    const f = VIS_H / vh;
-    let W, H, pasteX, pasteY;
-    if (R > 1) {
-      W = PANEL_OUT.w / f;
-      H = W / R;
-      pasteX = 0;
-      pasteY = (PANEL_OUT.h - H * f) / 2;
-    } else {
-      H = PANEL_OUT.h / f;
-      W = H * R;
-      pasteX = (PANEL_OUT.w - W * f) / 2;
-      pasteY = 0;
-    }
+    const c = cropFromVis(vx, vy, vw, vh, R);
     // 与普通框选同边界(尺寸≤3倍图幅、位置±1倍图幅); 超限保持上一状态,
     // 否则反推的外框可无限增大, 拉到边缘后急速缩放失控
     const iw = state.cropImgEl?.clientWidth || 0;
     const ih = state.cropImgEl?.clientHeight || 0;
-    if (!iw || !ih || W > iw * 3 || H > ih * 3) return;
-    let x = vx - (PANEL_VIS.l - pasteX) / f;
-    let y = vy - (PANEL_VIS.t - pasteY) / f;
-    x = Math.min(Math.max(x, -iw), 2 * iw - W);
-    y = Math.min(Math.max(y, -ih), 2 * ih - H);
-    state.cropRect = { x, y, w: W, h: H };
+    if (!iw || !ih || c.w > iw * 3 || c.h > ih * 3) return;
+    c.x = Math.min(Math.max(c.x, -iw), 2 * iw - c.w);
+    c.y = Math.min(Math.max(c.y, -ih), 2 * ih - c.h);
+    state.cropRect = c;
   };
 
   try { visEl.setPointerCapture(ev.pointerId); } catch (_) {}
@@ -1066,7 +1091,7 @@ function startVisDrag(ev, wrap, visEl) {
 
   const cleanup = () => {
     visEl.removeEventListener("pointermove", move);
-    visEl.removeEventListener("pointerup", onUp);
+    visEl.removeEventListener("pointerup", cleanup);
     visEl.removeEventListener("pointercancel", cleanup);
     try { visEl.releasePointerCapture(ev.pointerId); } catch (_) {}
     if (pending != null) {
@@ -1074,20 +1099,16 @@ function startVisDrag(ev, wrap, visEl) {
       flush();
     }
   };
-  const onUp = () => { cleanup(); scheduleAutoCrop(); };
 
   visEl.addEventListener("pointermove", move);
-  visEl.addEventListener("pointerup", onUp);
+  visEl.addEventListener("pointerup", cleanup);
   visEl.addEventListener("pointercancel", cleanup);
 }
 
-// 拖拽结束后等待 IDLE_MS 静止再落库, 节流连续微调。
-const _AUTO_CROP_IDLE_MS = 800;
-let _autoCropTimer = null;
 let _cropInflight = false;
 
-// 框选落库前禁用「确认」, 防止定时落库晚于确认。
-function isCropBusy() { return _autoCropTimer != null || _cropInflight; }
+// 缩放/压缩在途时禁用「确认」。
+function isCropBusy() { return _cropInflight; }
 function syncCropConfirm() {
   const busy = isCropBusy();
   const btn = document.getElementById("cropConfirmBtn");
@@ -1100,29 +1121,13 @@ function syncCropConfirm() {
   if (actions) actions.classList.toggle("is-busy", busy);
 }
 
-function scheduleAutoCrop() {
-  if (state.type === "card") return;
-  clearTimeout(_autoCropTimer);
-  _autoCropTimer = setTimeout(async () => {
-    _autoCropTimer = null;
-    if (_cropInflight) {
-      // 在途时排队再触发一次, 保证最新一次操作一定被应用
-      _autoCropTimer = setTimeout(scheduleAutoCrop, 200);
-      syncCropConfirm();
-      return;
-    }
-    await commitCrop({ auto: true });
-  }, _AUTO_CROP_IDLE_MS);
-  syncCropConfirm();
-}
-
 function displayToSourceRect(rect) {
   const img = state.cropImgEl;
   if (!img) return null;
   const sx = img.naturalWidth / img.clientWidth;
   const sy = img.naturalHeight / img.clientHeight;
   return {
-    // 允许负坐标(框选越过原图左/上边界), 越界部分显示为白色
+    // 允许负坐标, 越界部分面板图填白, 其余透明
     x: Math.round(rect.x * sx),
     y: Math.round(rect.y * sy),
     w: Math.max(1, Math.round(rect.w * sx)),
@@ -1146,35 +1151,15 @@ function updateRectReadout() {
     state.cropTmp.crop = cropOf(s);
     syncBatchCropItem();
     syncSizeReadouts();
-    requestLocalPanelDraw();
+    requestLocalDraw();
   }
 }
 
-async function commitCrop({ auto = false } = {}) {
-  const tmp = state.cropTmp;
-  if (_cropInflight || !tmp) return;
-  if (state.type !== "card") {
-    _cropInflight = true;
-    syncCropConfirm();
-    try {
-      await persistCrop(tmp);
-    } catch (e) {
-      return toast(`框选失败: ${e.message}`, "err");
-    } finally {
-      _cropInflight = false;
-      syncCropConfirm();
-    }
-  }
-  triggerPreview(true, !auto);
-}
-
-async function restoreCrop() {
+function restoreCrop() {
   if (_cropInflight || !state.cropTmp) return;
-  clearTimeout(_autoCropTimer);
-  _autoCropTimer = null;
   state.cropTmp.crop = state.cropTmp.savedCrop || null;
   initCropRect(state.cropImgEl, state.cropImgEl.parentElement);
-  await commitCrop();
+  triggerPreview(true, true);
   toast("已还原框选", "ok", 1800);
 }
 
@@ -1300,14 +1285,12 @@ async function doResize(scale, compress) {
 }
 
 function _resetCropState() {
-  clearLocalPanelPreview();
+  clearLocalPreview();
   state.cropTmp = null;
   state.cropRect = null;
   state.cropImgEl = null;
   state.cropClient = null;
   state.editWarnDismissed = false;
-  clearTimeout(_autoCropTimer);
-  _autoCropTimer = null;
   _cropInflight = false;
 }
 
@@ -1680,19 +1663,6 @@ function buildPreviewUrl() {
     });
     return `${API}/preview?${p.toString()}`;
   }
-  if (state.mode === "single-crop" && state.cropTmp && state.selectedCharId) {
-    // 编辑已有立绘时排行预览沿用其已保存的偏移
-    const off = state.renderer === "rank" ? state.cropTmp.rankOffset : null;
-    const p = new URLSearchParams({
-      type: state.type,
-      char_id: state.selectedCharId,
-      token: state.cropTmp.token,
-      renderer: state.renderer,
-      ...(off ? { dx: String(off.x), dy: String(off.y), scale: String(off.scale ?? 1) } : {}),
-      ...lq,
-    });
-    return `${API}/preview-tmp?${p.toString()}`;
-  }
   return null;
 }
 
@@ -1726,9 +1696,9 @@ function triggerPreview(force = false, manual = false) {
   if (isGuest()) return setPreviewSrc(null, false);
   // 关闭自动刷新: 仅手动「刷新」(manual) 触发渲染
   if (!manual && !state.previewAuto) return;
-  if (state.type === "card" && state.mode === "single-crop" && state.cropTmp) {
+  if (state.mode === "single-crop" && state.cropTmp) {
     clearTimeout(previewTimer);
-    ensureLocalPanelPreview();
+    ensureLocalPreview();
     return;
   }
   const url = buildPreviewUrl();
@@ -1740,24 +1710,31 @@ function triggerPreview(force = false, manual = false) {
   }, force ? 0 : 60);
 }
 
-// 固定面板层只加载一次, 拖动时在浏览器合成原图, 不请求后端重新出图。
-let localPanelAssets = null;
-let localPanelLoad = null;
-let localPanelSeq = 0;
-let localPanelRaf = null;
+// 固定层每个编辑会话只加载一次, 拖动时在浏览器合成原图, 不请求后端重新出图。
+let localAssets = null;
+let localLoad = null;
+let localSeq = 0;
+let localRaf = null;
+const localCache = new Map();
 
-function clearLocalPanelPreview() {
-  localPanelSeq++;
-  localPanelAssets = null;
-  localPanelLoad = null;
-  if (localPanelRaf != null) cancelAnimationFrame(localPanelRaf);
-  localPanelRaf = null;
+function clearLocalPreview() {
+  localSeq++;
+  localAssets = null;
+  localLoad = null;
+  localCache.clear();
+  if (localRaf != null) cancelAnimationFrame(localRaf);
+  localRaf = null;
   $("#previewViewport")?.classList.remove("has-canvas");
 }
 
-function localPanelKey() {
-  return state.type === "card" && state.mode === "single-crop" && state.cropTmp
-    ? `${state.selectedCharId}|${state.cropTmp.token}` : null;
+function localPreviewKind() {
+  if (state.type === "card") return "panel";
+  return state.type === "stamina" && state.renderer === "rank" ? "rank" : "mr";
+}
+
+function localPreviewKey() {
+  return state.mode === "single-crop" && state.cropTmp
+    ? `${state.type}|${localPreviewKind()}|${state.renderer}|${state.selectedCharId}|${state.cropTmp.token}` : null;
 }
 
 function loadPanelAsset(src) {
@@ -1769,49 +1746,88 @@ function loadPanelAsset(src) {
   });
 }
 
-async function ensureLocalPanelPreview() {
-  const key = localPanelKey();
+function offscreen(w, h) {
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  return c;
+}
+
+async function loadLocalAssets(kind) {
+  const charId = state.selectedCharId, token = state.cropTmp.token;
+  if (kind === "panel") {
+    const data = await api(`/panel-layers?${new URLSearchParams({ char_id: charId, token })}`);
+    const [base, mask, foreground] = await Promise.all(
+      [data.base, data.mask, data.foreground].map(loadPanelAsset));
+    return { base, mask, foreground, layer: offscreen(PANEL_OUT.w, PANEL_OUT.h), x: data.x, y: data.y };
+  }
+  if (kind === "rank") {
+    const [bg, base, mask, text] = await Promise.all(["bg", "base", "mask", "text"].map(
+      k => loadPanelAsset(rankLayerUrl(k, k === "text" ? { char_id: charId } : {}))));
+    return { bg, base, mask, text, layer: offscreen(RANK_CANVAS.w, RANK_CANVAS.titleH) };
+  }
+  const params = new URLSearchParams({ type: state.type, char_id: charId, token, renderer: state.renderer });
+  const data = await api(`/mr-layers?${params}`);
+  const [overlay, transmit, base] = await Promise.all(
+    [data.overlay, data.transmit, data.base].map(src => src ? loadPanelAsset(src) : null));
+  return { overlay, transmit, base, renderer: data.renderer };
+}
+
+async function ensureLocalPreview() {
+  const key = localPreviewKey();
   if (!key) return;
-  if (localPanelAssets?.key === key) return requestLocalPanelDraw(true);
-  if (localPanelLoad?.key === key) return;
-  const seq = ++localPanelSeq;
-  localPanelLoad = { key };
+  if (localAssets?.key !== key && localCache.has(key)) localAssets = localCache.get(key);
+  if (localAssets?.key === key) return requestLocalDraw(true);
+  if (localLoad?.key === key) return;
+  const seq = ++localSeq;
+  localLoad = { key };
   $("#previewViewport").classList.remove("has-image", "has-canvas");
   $("#previewOverlay").classList.add("is-on");
   try {
-    const params = new URLSearchParams({ char_id: state.selectedCharId, token: state.cropTmp.token });
-    const data = await api(`/panel-layers?${params}`);
-    const [base, mask, foreground] = await Promise.all([
-      loadPanelAsset(data.base), loadPanelAsset(data.mask), loadPanelAsset(data.foreground),
-    ]);
-    if (seq !== localPanelSeq || key !== localPanelKey()) return;
-    const layer = document.createElement("canvas");
-    layer.width = PANEL_OUT.w;
-    layer.height = PANEL_OUT.h;
-    localPanelAssets = { key, base, mask, foreground, layer, x: data.x, y: data.y };
-    requestLocalPanelDraw(true);
+    const kind = localPreviewKind();
+    const assets = { key, kind, ...(await loadLocalAssets(kind)) };
+    if (seq !== localSeq) return;
+    localCache.set(key, assets);
+    if (key !== localPreviewKey()) return;
+    localAssets = assets;
+    requestLocalDraw(true);
   } catch (e) {
-    if (seq === localPanelSeq) toast(`预览失败: ${e.message}`, "err");
+    if (seq === localSeq) toast(`预览失败: ${e.message}`, "err");
   } finally {
-    if (seq === localPanelSeq) {
-      localPanelLoad = null;
+    if (seq === localSeq) {
+      localLoad = null;
       $("#previewOverlay").classList.remove("is-on");
     }
   }
 }
 
-function requestLocalPanelDraw(manual = false) {
+function requestLocalDraw(manual = false) {
   if (!manual && !state.previewAuto) return;
-  if (localPanelRaf != null || localPanelAssets?.key !== localPanelKey()) return;
-  localPanelRaf = requestAnimationFrame(drawLocalPanelPreview);
+  if (localRaf != null || localAssets?.key !== localPreviewKey()) return;
+  localRaf = requestAnimationFrame(drawLocalPreview);
 }
 
-function drawLocalPanelPreview() {
-  localPanelRaf = null;
-  const assets = localPanelAssets;
+function sizeCanvas(canvas, w, h) {
+  if (canvas.width !== w) canvas.width = w;
+  if (canvas.height !== h) canvas.height = h;
+  return canvas.getContext("2d");
+}
+
+function drawLocalPreview() {
+  localRaf = null;
+  const assets = localAssets;
   const raw = state.cropImgEl;
-  if (!assets || assets.key !== localPanelKey() || !raw?.complete || !raw.naturalWidth) return;
+  if (!assets || assets.key !== localPreviewKey() || !raw?.complete || !raw.naturalWidth) return;
   const crop = state.cropTmp?.crop || { x: 0, y: 0, w: raw.naturalWidth, h: raw.naturalHeight };
+  const canvas = $("#previewCanvas");
+  if (assets.kind === "panel") drawPanelPreview(canvas, assets, raw, crop);
+  else if (assets.kind === "rank") drawRankPreview(canvas, assets, raw, crop, state.cropTmp.rankOffset);
+  else drawMrPreview(canvas, assets, raw, crop);
+  $("#previewViewport").classList.add("has-canvas");
+  $("#previewOverlay").classList.remove("is-on");
+}
+
+function drawPanelPreview(canvas, assets, raw, crop) {
   const layer = assets.layer;
   const ctx = layer.getContext("2d");
   ctx.globalCompositeOperation = "source-over";
@@ -1848,16 +1864,42 @@ function drawLocalPanelPreview() {
   ctx.putImageData(pixels, 0, 0);
   ctx.globalCompositeOperation = "destination-in";
   ctx.drawImage(assets.mask, 0, 0);
-  const canvas = $("#previewCanvas");
-  if (canvas.width !== assets.base.naturalWidth) canvas.width = assets.base.naturalWidth;
-  if (canvas.height !== assets.base.naturalHeight) canvas.height = assets.base.naturalHeight;
-  const output = canvas.getContext("2d");
+  const output = sizeCanvas(canvas, assets.base.naturalWidth, assets.base.naturalHeight);
   output.clearRect(0, 0, canvas.width, canvas.height);
   output.drawImage(assets.base, 0, 0);
   output.drawImage(layer, assets.x, assets.y);
   output.drawImage(assets.foreground, assets.x, assets.y);
-  $("#previewViewport").classList.add("has-canvas");
-  $("#previewOverlay").classList.remove("is-on");
+}
+
+// 底层 × transmit + overlay, 见 preview.render_mr_layers
+function drawMrPreview(canvas, assets, raw, crop) {
+  const { w: W, h: H } = MR_CARD;
+  const ctx = sizeCanvas(canvas, W, H);
+  ctx.globalCompositeOperation = "source-over";
+  ctx.imageSmoothingQuality = "high";
+  if (state.type === "bg") {
+    // object-fit: cover
+    const s = Math.max(W / crop.w, H / crop.h);
+    const dw = crop.w * s, dh = crop.h * s;
+    ctx.fillStyle = "#0f1115";
+    ctx.fillRect(0, 0, W, H);
+    ctx.drawImage(raw, crop.x, crop.y, crop.w, crop.h, (W - dw) / 2, (H - dh) / 2, dw, dh);
+  } else {
+    ctx.drawImage(assets.base, 0, 0, W, H);
+    if (assets.renderer === "html") {
+      const w = crop.w * H / crop.h;
+      Object.assign(ctx, { shadowColor: "rgba(0,0,0,0.3)", shadowOffsetX: -10, shadowBlur: 20 });
+      ctx.drawImage(raw, crop.x, crop.y, crop.w, crop.h, W - MR_PILE_HTML.right - w, MR_PILE_HTML.top, w, H);
+      Object.assign(ctx, { shadowColor: "transparent", shadowOffsetX: 0, shadowBlur: 0 });
+    } else {
+      ctx.drawImage(raw, crop.x, crop.y, crop.w, crop.h, MR_PILE_PIL.x, MR_PILE_PIL.y, crop.w, crop.h);
+    }
+  }
+  ctx.globalCompositeOperation = "multiply";
+  ctx.drawImage(assets.transmit, 0, 0);
+  ctx.globalCompositeOperation = "lighter";
+  ctx.drawImage(assets.overlay, 0, 0);
+  ctx.globalCompositeOperation = "source-over";
 }
 
 // ============================================================
@@ -2363,6 +2405,34 @@ const RANK_PASTE = { x: 450, y: -120 };
 const PILE_USES = [["", "都用"], ["stamina", "仅体力"], ["rank", "仅排行"]];
 const RANK_LAYER_VER = 1;
 
+function rankLayerUrl(kind, extra = {}) {
+  return `${API}/rank-layer?${new URLSearchParams({ kind, ...extra, v: String(RANK_LAYER_VER) })}`;
+}
+
+// 与后端 render_rank_preview 同序: base → pile → text, 整层按 char_mask 抠, 再盖到 bg 上
+function drawRankPreview(canvas, assets, pile, crop, off) {
+  const layer = assets.layer;
+  const lc = layer.getContext("2d");
+  lc.globalCompositeOperation = "source-over";
+  lc.clearRect(0, 0, layer.width, layer.height);
+  lc.drawImage(assets.base, 0, 0);
+  // 缩放以立绘中心为锚, 与后端 place_rank_pile 同算法 (floor 取整)
+  const s = off?.scale ?? 1;
+  const { w, h } = crop;
+  const nw = Math.max(1, Math.round(w * s)), nh = Math.max(1, Math.round(h * s));
+  lc.imageSmoothingQuality = "high";
+  lc.drawImage(pile, crop.x, crop.y, w, h,
+    RANK_PASTE.x + (off?.x || 0) + Math.floor((w - nw) / 2),
+    RANK_PASTE.y + (off?.y || 0) + Math.floor((h - nh) / 2), nw, nh);
+  lc.drawImage(assets.text, 0, 0);
+  lc.globalCompositeOperation = "destination-in";
+  lc.drawImage(assets.mask, 0, 0);
+  const c = sizeCanvas(canvas, RANK_CANVAS.w, RANK_CANVAS.h);
+  c.clearRect(0, 0, canvas.width, canvas.height);
+  c.drawImage(assets.bg, 0, 0);
+  c.drawImage(layer, 0, 0);
+}
+
 function openRankOffsetModal(img) {
   if (!img || state.type !== "stamina" || !state.selectedCharId || isGuest()) return;
   const charId = state.selectedCharId;
@@ -2417,28 +2487,12 @@ function openRankOffsetModal(img) {
     scaleOut.textContent = `×${cur.s.toFixed(2)}` + (pw ? ` · ${Math.round(pw * cur.s)}×${Math.round(ph * cur.s)}` : "");
   };
 
-  // 与后端 render_rank_preview 同序: base → pile → text, 整层按 char_mask 抠, 再盖到 bg 上
   const draw = () => {
     raf = null;
     if (!assets || closed) return;
-    const lc = layer.getContext("2d");
-    lc.globalCompositeOperation = "source-over";
-    lc.clearRect(0, 0, layer.width, layer.height);
-    lc.drawImage(assets.base, 0, 0);
-    // 缩放以立绘中心为锚, 与后端 place_rank_pile 同算法 (floor 取整)
-    const w = assets.pile.naturalWidth, h = assets.pile.naturalHeight;
-    const nw = Math.max(1, Math.round(w * cur.s)), nh = Math.max(1, Math.round(h * cur.s));
-    lc.imageSmoothingQuality = "high";
-    lc.drawImage(assets.pile,
-      RANK_PASTE.x + cur.x + Math.floor((w - nw) / 2),
-      RANK_PASTE.y + cur.y + Math.floor((h - nh) / 2), nw, nh);
-    lc.drawImage(assets.text, 0, 0);
-    lc.globalCompositeOperation = "destination-in";
-    lc.drawImage(assets.mask, 0, 0);
-    const c = canvas.getContext("2d");
-    c.clearRect(0, 0, canvas.width, canvas.height);
-    c.drawImage(assets.bg, 0, 0);
-    c.drawImage(layer, 0, 0);
+    const { pile } = assets;
+    drawRankPreview(canvas, assets, pile, { x: 0, y: 0, w: pile.naturalWidth, h: pile.naturalHeight },
+      { x: cur.x, y: cur.y, scale: cur.s });
   };
   const requestDraw = () => { if (raf == null) raf = requestAnimationFrame(draw); };
   const set = (x, y) => { cur.x = clamp(x); cur.y = clamp(y); render(); requestDraw(); };
@@ -2451,19 +2505,17 @@ function openRankOffsetModal(img) {
     i.onerror = () => rej(new Error(new URL(src, location.href).searchParams.get("kind") || "layer"));
     i.src = src;
   });
-  const layerUrl = (kind, extra = {}) =>
-    `${API}/rank-layer?${new URLSearchParams({ kind, ...extra, v: String(RANK_LAYER_VER) })}`;
   (async () => {
     try {
       const [bg, base, mask, text, pile] = await Promise.all([
-        loadImg(layerUrl("bg")),
-        loadImg(layerUrl("base")),
-        loadImg(layerUrl("mask")),
-        loadImg(layerUrl("text", { char_id: charId })),
-        loadImg(layerUrl("pile", { char_id: charId, name: img.name, m: img.ver ?? "" })),
+        loadImg(rankLayerUrl("bg")),
+        loadImg(rankLayerUrl("base")),
+        loadImg(rankLayerUrl("mask")),
+        loadImg(rankLayerUrl("text", { char_id: charId })),
+        loadImg(rankLayerUrl("pile", { char_id: charId, name: img.name, m: img.ver ?? "" })),
       ]);
       if (closed) return;
-      assets = { bg, base, mask, text, pile };
+      assets = { bg, base, mask, text, pile, layer };
       preview.classList.remove("is-loading");
       render();
       requestDraw();
