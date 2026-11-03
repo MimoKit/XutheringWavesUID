@@ -10,6 +10,7 @@ from gsuid_core.help.draw_new_plugin_help import get_new_help
 
 from ..version import XutheringWavesUID_version
 from ..utils.image import get_footer
+from ..utils.theme import is_dark_theme
 from ..wutheringwaves_config import PREFIX, ShowConfig
 from .get_help import attach_icons
 
@@ -29,18 +30,21 @@ plugin_help = get_help_data()
 
 
 async def get_change_help(pm: int):
+    dark = is_dark_theme()
     # 与主帮助图共享 ShowConfig 的头像/背景配置
     banner_bg_config = ShowConfig.get_config("HelpBannerBgUpload").data
     help_bg_config = ShowConfig.get_config("HelpBgUpload").data
     plugin_icon_config = ShowConfig.get_config("HelpIconUpload").data
     column_config = ShowConfig.get_config("HelpColumn").data
 
-    if banner_bg_config and Path(banner_bg_config).exists():
+    custom_banner = bool(banner_bg_config and Path(banner_bg_config).exists())
+    if custom_banner:
         banner_bg_path = Path(banner_bg_config)
     else:
         banner_bg_path = TEXT_PATH / "banner_bg.jpg"
 
-    if help_bg_config and Path(help_bg_config).exists():
+    custom_help_bg = bool(help_bg_config and Path(help_bg_config).exists())
+    if custom_help_bg:
         help_bg_path = Path(help_bg_config)
     else:
         help_bg_path = TEXT_PATH / "bg.jpg"
@@ -60,14 +64,14 @@ async def get_change_help(pm: int):
         plugin_icon=plugin_icon,
         plugin_help=attach_icons(plugin_help, ICON_PATH),
         plugin_prefix=PREFIX,
-        help_mode="dark",
-        banner_bg=banner_bg,
+        help_mode="dark" if dark else "light",
+        banner_bg=banner_bg if (dark or custom_banner) else None,
         banner_sub_text="面板替换帮助",
-        help_bg=help_bg,
-        cag_bg=cag_bg,
-        item_bg=item_bg,
+        help_bg=help_bg if (dark or custom_help_bg) else None,
+        cag_bg=cag_bg if dark else None,
+        item_bg=item_bg if dark else None,
         icon_path=ICON_PATH,
-        footer=get_footer(),
+        footer=get_footer("white" if dark else "black"),
         enable_cache=False,
         column=column_config,
         pm=pm,

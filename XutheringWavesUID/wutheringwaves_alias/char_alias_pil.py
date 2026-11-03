@@ -273,7 +273,7 @@ def _compose_char_alias(char_name: str, alias_list: List[str], avatar) -> Image.
     _draw_round_rect(canvas, (50, label_y - 7, 53, label_y + 7), 2, ACCENT)
     _draw_text(draw, (62, label_y), "ALIASES", waves_font_16, SUB_TEXT, "lm")
     _draw_tag_rows(canvas, draw, tag_rows, 50, label_y + 25, 32, 8, 8, waves_font_16, first_highlight=True, radius=6)
-    add_footer(canvas, w=260, offset_y=8, color="white")
+    add_footer(canvas, w=260, offset_y=8)
     return canvas
 
 

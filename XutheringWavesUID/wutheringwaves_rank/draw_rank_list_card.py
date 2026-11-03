@@ -51,6 +51,7 @@ from ..utils.fonts.waves_fonts import (
     waves_font_58,
 )
 from ..utils.resource.RESOURCE_PATH import PLAYER_PATH
+from ..utils.theme import text as theme_text
 
 
 def calculate_role_phantom_score(role_detail: RoleDetailData) -> float:
@@ -341,19 +342,19 @@ async def draw_rank_list(bot: Bot, ev: Event, threshold: int = 175) -> Union[str
     text_bar_draw.rectangle([20, 20, width - 40, 26], fill=accent_color)
 
     # 左侧标题
-    text_bar_draw.text((40, 60), "排行说明", GREY, waves_font_28, "lm")
-    text_bar_draw.text(
+    theme_text(text_bar_draw, (40, 60), "排行说明", GREY, waves_font_28, "lm")
+    theme_text(text_bar_draw, 
         (185, 50),
         "1. 综合所有角色的声骸分数。仅计算本地评分，不考虑套装和共享声骸。",
         SPECIAL_GOLD,
         waves_font_20,
         "lm",
     )
-    text_bar_draw.text((185, 85), "2. 仅显示近期活跃用户，至多显示声骸分数最高的前8个角色" if WutheringWavesConfig.get_config("RankActiveFilterGroup").data else "2. 至多显示声骸分数最高的前8个角色", SPECIAL_GOLD, waves_font_20, "lm")
+    theme_text(text_bar_draw, (185, 85), "2. 仅显示近期活跃用户，至多显示声骸分数最高的前8个角色" if WutheringWavesConfig.get_config("RankActiveFilterGroup").data else "2. 至多显示声骸分数最高的前8个角色", SPECIAL_GOLD, waves_font_20, "lm")
 
     # 备注 - 排行标准，根据阈值动态生成文案
     temp_notes = f"排行标准：以所有角色声骸分数总和（角色分数>={threshold}（{threshold_label}级））为排序的综合排名"
-    text_bar_draw.text((width - 40, 110), temp_notes, SPECIAL_GOLD, waves_font_16, "rm")
+    theme_text(text_bar_draw, (width - 40, 110), temp_notes, SPECIAL_GOLD, waves_font_16, "rm")
 
     card_img.alpha_composite(text_bar_img, (0, header_height))
 
@@ -419,10 +420,10 @@ def _compose_rank_list_impl(card_img, bar, rankInfoList_display, display_rank_id
         uid_color = "white"
         if rankInfo.uid == self_uid:
             uid_color = RED
-        bar_draw.text((210, 40), f"{mask_uid(rankInfo.uid, rankInfo.qid)}", uid_color, waves_font_20, "lm")
+        theme_text(bar_draw, (210, 40), f"{mask_uid(rankInfo.uid, rankInfo.qid)}", uid_color, waves_font_20, "lm")
 
         char_count = len(rankInfo.role_details)
-        bar_draw.text((210, 75), f"{threshold_label}角色数: {char_count}", "white", waves_font_18, "lm")
+        theme_text(bar_draw, (210, 75), f"{threshold_label}角色数: {char_count}", "white", waves_font_18, "lm")
 
         if rankInfo.role_details:
             role_scores = []
@@ -469,7 +470,7 @@ def _compose_rank_list_impl(card_img, bar, rankInfoList_display, display_rank_id
                 bar_bg.paste(char_avatar_masked, (char_x, char_start_y), char_avatar_masked)
 
                 score_text = f"{int(score)}"
-                bar_draw.text(
+                theme_text(bar_draw, 
                     (char_x + char_size // 2, char_start_y + char_size + 2),
                     score_text,
                     SPECIAL_GOLD,
@@ -479,17 +480,17 @@ def _compose_rank_list_impl(card_img, bar, rankInfoList_display, display_rank_id
 
             if sorted_roles:
                 best_score = f"{int(sorted_roles[0][1])}"
-                bar_draw.text((760, 45), best_score, "lightgreen", waves_font_30, "mm")
-                bar_draw.text((760, 75), "最高分", "white", waves_font_16, "mm")
+                theme_text(bar_draw, (760, 45), best_score, "lightgreen", waves_font_30, "mm")
+                theme_text(bar_draw, (760, 75), "最高分", "white", waves_font_16, "mm")
 
-        bar_draw.text(
+        theme_text(bar_draw, 
             (880, 45),
             f"{rankInfo.total_score}",
             (255, 255, 255),
             waves_font_34,
             "mm",
         )
-        bar_draw.text((880, 75), "总分", "white", waves_font_16, "mm")
+        theme_text(bar_draw, (880, 75), "总分", "white", waves_font_16, "mm")
 
         card_img.paste(bar_bg, (0, y_pos), bar_bg)
 
@@ -502,9 +503,9 @@ def _compose_rank_list_impl(card_img, bar, rankInfoList_display, display_rank_id
 
     title_text = "#练度群排行"
     title_bg_draw = ImageDraw.Draw(title_bg)
-    title_bg_draw.text((220, 290), title_text, "white", waves_font_58, "lm")
+    theme_text(title_bg_draw, (220, 290), title_text, "white", waves_font_58, "lm")
     date_text = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-    title_bg_draw.text((225, 360), date_text, GREY, waves_font_20, "lm")
+    theme_text(title_bg_draw, (225, 360), date_text, GREY, waves_font_20, "lm")
 
     char_mask_img = Image.open(TEXT_PATH / "char_mask.png").convert("RGBA")
     char_mask_img = char_mask_img.resize((width, char_mask_img.height * width // char_mask_img.width))

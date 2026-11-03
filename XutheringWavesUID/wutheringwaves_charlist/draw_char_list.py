@@ -50,6 +50,7 @@ from ..utils.resource.constant import NORMAL_LIST, NORMAL_LIST_IDS, SPECIAL_CHAR
 from ..utils.refresh_char_detail import refresh_char, refresh_lock
 from ..utils.resource.download_file import get_skill_img
 from ..utils.imagetool import get_weapon_icon_bg, draw_base_info_bg
+from ..utils.theme import text as theme_text
 
 TEXT_PATH = Path(__file__).parent / "texture2d"
 
@@ -257,28 +258,28 @@ def _render_bar(asset) -> Image.Image:
 
     role_attribute = asset["role_attribute"].resize((40, 40)).convert("RGBA")
     bar_star.alpha_composite(role_attribute, (170, 20))
-    bar_star_draw.text((180, 83), f"Lv.{_rank.level}", GREY, waves_font_22, "mm")
+    theme_text(bar_star_draw, (180, 83), f"Lv.{_rank.level}", GREY, waves_font_22, "mm")
 
     # 命座
     info_block = Image.new("RGBA", (40, 20), color=(255, 255, 255, 0))
     info_block_draw = ImageDraw.Draw(info_block)
     fill = CHAIN_COLOR[role_detail.get_chain_num()] + (int(0.9 * 255),)
     info_block_draw.rectangle([0, 0, 40, 20], fill=fill)
-    info_block_draw.text((2, 10), f"{role_detail.get_chain_name()}", "white", waves_font_18, "lm")
+    theme_text(info_block_draw, (2, 10), f"{role_detail.get_chain_name()}", "white", waves_font_18, "lm")
     bar_star.alpha_composite(info_block, (120, 15))
 
     # 评分
     if _rank.score > 0.0:
         score_bg = Image.open(TEXT_PATH / f"score_{_rank.score_bg}.png")
         bar_star.alpha_composite(score_bg, (200, 2))
-        bar_star_draw.text(
+        theme_text(bar_star_draw, 
             (348, 42),
             f"{int(_rank.score * 100) / 100:.2f}",
             "white",
             waves_font_30,
             "mm",
         )
-        bar_star_draw.text((348, 75), "声骸分数", SPECIAL_GOLD, waves_font_16, "mm")
+        theme_text(bar_star_draw, (348, 75), "声骸分数", SPECIAL_GOLD, waves_font_16, "mm")
 
     # 技能
     skill_img_temp = Image.new("RGBA", (1500, 300))
@@ -306,7 +307,7 @@ def _render_bar(asset) -> Image.Image:
             color = CHAIN_COLOR_LIST[-4]
         elif _skill.level == 6:
             color = CHAIN_COLOR_LIST[-5]
-        temp_draw.text((62, 120), f"{_skill.level}", color, waves_font_38, "mm")
+        theme_text(temp_draw, (62, 120), f"{_skill.level}", color, waves_font_38, "mm")
 
         _x = 100 + i * 65
         skill_img_temp.alpha_composite(temp.resize((70, 82)), dest=(_x, 0))
@@ -321,14 +322,14 @@ def _render_bar(asset) -> Image.Image:
     weapon_icon_bg.paste(weapon_icon, (10, 20), weapon_icon)
 
     weapon_bg_temp_draw = ImageDraw.Draw(weapon_bg_temp)
-    weapon_bg_temp_draw.text(
+    theme_text(weapon_bg_temp_draw, 
         (200, 30),
         f"{weaponData.weapon.weaponName}",
         SPECIAL_GOLD,
         waves_font_40,
         "lm",
     )
-    weapon_bg_temp_draw.text((203, 75), f"Lv.{weaponData.level}/90", "white", waves_font_30, "lm")
+    theme_text(weapon_bg_temp_draw, (203, 75), f"Lv.{weaponData.level}/90", "white", waves_font_30, "lm")
 
     weapon_breach = get_breach(weaponData.breach, weaponData.level)
     for i in range(0, weapon_breach):  # type: ignore
@@ -342,7 +343,7 @@ def _render_bar(asset) -> Image.Image:
     if 0.299 * rc[0] + 0.587 * rc[1] + 0.114 * rc[2] > 135:
         rc = tuple(int(c * 0.6) for c in rc)
     weapon_bg_temp_draw.rounded_rectangle([112, 95, 170, 125], radius=8, fill=rc + (int(0.85 * 255),))  # type: ignore
-    weapon_bg_temp_draw.text((141, 110), f"{weaponData.resonLevel}阶", "white", waves_font_24, "mm")
+    theme_text(weapon_bg_temp_draw, (141, 110), f"{weaponData.resonLevel}阶", "white", waves_font_24, "mm")
 
     bar_star.alpha_composite(weapon_bg_temp.resize((260, 130)), dest=(710, 25))
 
@@ -352,14 +353,14 @@ def _render_bar(asset) -> Image.Image:
 def _draw_info_bg(stats) -> Image.Image:
     info_bg = Image.open(TEXT_PATH / "info_bg.png")
     info_bg_draw = ImageDraw.Draw(info_bg)
-    info_bg_draw.text((240, 120), f"{stats['up_num']}/{stats['all_up_num']}", "white", waves_font_40, "mm")
-    info_bg_draw.text((240, 160), "up角色", "white", waves_font_20, "mm")
-    info_bg_draw.text((410, 120), f"{stats['level_num']}/{stats['all_num']}", "white", waves_font_40, "mm")
-    info_bg_draw.text((410, 160), "高练角色", "white", waves_font_20, "mm")
-    info_bg_draw.text((580, 120), f"{stats['chain_num']}/{stats['all_num'] - stats['all_num_5']}", "white", waves_font_40, "mm")
-    info_bg_draw.text((580, 160), "高链4星", "white", waves_font_20, "mm")
-    info_bg_draw.text((750, 120), f"{stats['chain_num_5']}/{stats['all_num_5']}", "white", waves_font_40, "mm")
-    info_bg_draw.text((750, 160), "高链5星", "white", waves_font_20, "mm")
+    theme_text(info_bg_draw, (240, 120), f"{stats['up_num']}/{stats['all_up_num']}", "white", waves_font_40, "mm")
+    theme_text(info_bg_draw, (240, 160), "up角色", "white", waves_font_20, "mm")
+    theme_text(info_bg_draw, (410, 120), f"{stats['level_num']}/{stats['all_num']}", "white", waves_font_40, "mm")
+    theme_text(info_bg_draw, (410, 160), "高练角色", "white", waves_font_20, "mm")
+    theme_text(info_bg_draw, (580, 120), f"{stats['chain_num']}/{stats['all_num'] - stats['all_num_5']}", "white", waves_font_40, "mm")
+    theme_text(info_bg_draw, (580, 160), "高链4星", "white", waves_font_20, "mm")
+    theme_text(info_bg_draw, (750, 120), f"{stats['chain_num_5']}/{stats['all_num_5']}", "white", waves_font_40, "mm")
+    theme_text(info_bg_draw, (750, 160), "高链5星", "white", waves_font_20, "mm")
     return info_bg
 
 
@@ -403,11 +404,11 @@ def _compose_char_list(
     if account_info.is_full:
         title_bar = Image.open(TEXT_PATH / "title_bar.png")
         title_bar_draw = ImageDraw.Draw(title_bar)
-        title_bar_draw.text((660, 125), "账号等级", GREY, waves_font_26, "mm")
-        title_bar_draw.text((660, 78), f"Lv.{account_info.level}", "white", waves_font_42, "mm")
+        theme_text(title_bar_draw, (660, 125), "账号等级", GREY, waves_font_26, "mm")
+        theme_text(title_bar_draw, (660, 78), f"Lv.{account_info.level}", "white", waves_font_42, "mm")
 
-        title_bar_draw.text((810, 125), "世界等级", GREY, waves_font_26, "mm")
-        title_bar_draw.text((810, 78), f"Lv.{account_info.worldLevel}", "white", waves_font_42, "mm")
+        theme_text(title_bar_draw, (810, 125), "世界等级", GREY, waves_font_26, "mm")
+        theme_text(title_bar_draw, (810, 78), f"Lv.{account_info.worldLevel}", "white", waves_font_42, "mm")
         card_img.paste(title_bar, (-20, 70), title_bar)
 
     # 角色数量统计: 双列时横排到右侧, 单列时在头像下方
@@ -433,7 +434,7 @@ def _compose_char_list(
     if two_col:
         hint_draw = ImageDraw.Draw(card_img)
         hint = f"可指定  {PREFIX}练度统计 五星/四星/全部  1/2 单列/双列"
-        hint_draw.text((width // 2, header_h + rows * bar_star_h + 35), hint, SPECIAL_GOLD, waves_font_24, "mm")
+        theme_text(hint_draw, (width // 2, header_h + rows * bar_star_h + 35), hint, SPECIAL_GOLD, waves_font_24, "mm")
 
     card_img = add_footer(card_img)
     return card_img

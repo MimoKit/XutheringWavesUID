@@ -45,6 +45,7 @@ from ..utils.fonts.waves_fonts import (
     waves_font_34,
     waves_font_58,
 )
+from ..utils.theme import text as theme_text
 
 TEXT_PATH = Path(__file__).parent / "texture2d"
 char_mask = Image.open(TEXT_PATH / "char_mask.png")
@@ -122,19 +123,19 @@ async def draw_total_rank(bot: Bot, ev: Event, pages: int) -> Union[str, bytes]:
     text_bar_draw.rectangle([20, 20, width - 40, 26], fill=accent_color)
 
     # 左侧标题
-    text_bar_draw.text((40, 60), "排行说明", GREY, waves_font_28, "lm")
-    text_bar_draw.text(
+    theme_text(text_bar_draw, (40, 60), "排行说明", GREY, waves_font_28, "lm")
+    theme_text(text_bar_draw, 
         (185, 50),
         "1. 综合所有角色的声骸分数。具备声骸套装的角色，全量刷新面板后更新排行位置。",
         SPECIAL_GOLD,
         waves_font_20,
         "lm",
     )
-    text_bar_draw.text((185, 85), "2. 显示前10个最强角色，刷新单角色影响此处显示但不计入总分。", SPECIAL_GOLD, waves_font_20, "lm")
+    theme_text(text_bar_draw, (185, 85), "2. 显示前10个最强角色，刷新单角色影响此处显示但不计入总分。", SPECIAL_GOLD, waves_font_20, "lm")
 
     # 备注
     temp_notes = "排行标准：以所有角色评分（分数>=175）总和为排序的综合排名"
-    text_bar_draw.text((1260, 100), temp_notes, SPECIAL_GOLD, waves_font_16, "rm")
+    theme_text(text_bar_draw, (1260, 100), temp_notes, SPECIAL_GOLD, waves_font_16, "rm")
 
     card_img.alpha_composite(text_bar_img, (0, header_height))
 
@@ -193,29 +194,29 @@ def _compose_total_rank(card_img, bar, details, results, char_avatar_map,
             130,
             (waves_font_20, waves_font_18, waves_font_16, waves_font_14, waves_font_12),
         )
-        bar_draw.text((210, 75), name_text, "white", name_font, "lm")
+        theme_text(bar_draw, (210, 75), name_text, "white", name_font, "lm")
 
         char_count = len(detail.char_score_details) if detail.char_score_details else 0
-        bar_draw.text((210, 45), "角色数:", (255, 255, 255), waves_font_18, "lm")
-        bar_draw.text((280, 45), f"{char_count}", RED, waves_font_20, "lm")
+        theme_text(bar_draw, (210, 45), "角色数:", (255, 255, 255), waves_font_18, "lm")
+        theme_text(bar_draw, (280, 45), f"{char_count}", RED, waves_font_20, "lm")
 
         uid_color = "white"
         if detail.waves_id == self_uid:
             uid_color = RED
-        bar_draw.text((350, 40), f"特征码: {hide_uid(detail.waves_id, user_pref='on' if detail.hide_uid else '')}", uid_color, waves_font_20, "lm")
+        theme_text(bar_draw, (350, 40), f"特征码: {hide_uid(detail.waves_id, user_pref='on' if detail.hide_uid else '')}", uid_color, waves_font_20, "lm")
 
         botName = getattr(detail, "alias_name", None)
         if botName:
             draw_bot_name_badge(bar_bg, getattr(detail, "background", ""), botName, (346, 61))
 
-        bar_draw.text(
+        theme_text(bar_draw, 
             (1180, 45),
             f"{detail.total_score:.1f}",
             (255, 255, 255),
             waves_font_34,
             "mm",
         )
-        bar_draw.text((1180, 75), "总分", "white", waves_font_16, "mm")
+        theme_text(bar_draw, (1180, 75), "总分", "white", waves_font_16, "mm")
 
         if detail.char_score_details:
             sorted_chars = sorted(detail.char_score_details, key=lambda x: x.phantom_score, reverse=True)[:10]
@@ -242,7 +243,7 @@ def _compose_total_rank(card_img, bar, details, results, char_avatar_map,
                 bar_bg.paste(char_avatar_masked, (char_x, char_start_y), char_avatar_masked)
 
                 score_text = f"{int(char.phantom_score)}"
-                bar_draw.text(
+                theme_text(bar_draw, 
                     (char_x + char_size // 2, char_start_y + char_size + 2),
                     score_text,
                     SPECIAL_GOLD,
@@ -252,8 +253,8 @@ def _compose_total_rank(card_img, bar, details, results, char_avatar_map,
 
             if sorted_chars:
                 best_score = f"{int(sorted_chars[0].phantom_score)} "
-                bar_draw.text((1080, 45), best_score, "lightgreen", waves_font_30, "mm")
-                bar_draw.text((1080, 75), "最高分", "white", waves_font_16, "mm")
+                theme_text(bar_draw, (1080, 45), best_score, "lightgreen", waves_font_30, "mm")
+                theme_text(bar_draw, (1080, 75), "最高分", "white", waves_font_16, "mm")
 
         card_img.paste(bar_bg, (0, y_pos), bar_bg)
 
@@ -266,9 +267,9 @@ def _compose_total_rank(card_img, bar, details, results, char_avatar_map,
 
     title_text = "#练度总排行"
     title_bg_draw = ImageDraw.Draw(title_bg)
-    title_bg_draw.text((220, 290), title_text, "white", waves_font_58, "lm")
+    theme_text(title_bg_draw, (220, 290), title_text, "white", waves_font_58, "lm")
     time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-    title_bg_draw.text((225, 360), time_str, GREY, waves_font_20, "lm")
+    theme_text(title_bg_draw, (225, 360), time_str, GREY, waves_font_20, "lm")
 
     char_mask = Image.open(TEXT_PATH / "char_mask.png").convert("RGBA")
     char_mask = char_mask.resize((width, char_mask.height * width // char_mask.width))

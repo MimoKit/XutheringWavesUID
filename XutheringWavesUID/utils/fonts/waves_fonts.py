@@ -191,6 +191,11 @@ def draw_text_with_emoji_fallback(
     **kwargs,
 ) -> float:
     """在原 i18n 字体 fallback 基础上补充彩色 emoji fallback。"""
+    if fill is not None:
+        from ..theme import T
+
+        fill = T(fill)
+
     if font is None:
         draw.text(xy, text, fill=fill, font=font, anchor=anchor, **kwargs)
         return 0
@@ -256,6 +261,12 @@ def draw_text_with_fallback(
     支持 anchor 参数 (lm/mm/rm 等)，支持多行文本（\\n）。
     返回绘制后的总宽度。
     """
+    # 主题：浅色配色下把浅色文字换成深色再画
+    if fill is not None:
+        from ..theme import T
+
+        fill = T(fill)
+
     # 多行文本：按 \n 分割后逐行绘制
     if "\n" in text:
         lines = text.split("\n")

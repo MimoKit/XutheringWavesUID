@@ -858,8 +858,13 @@ def add_footer(
     w: int = 0,
     offset_y: int = 0,
     is_invert: bool = False,
-    color: Literal["white", "black"] = "white",
+    color: Optional[Literal["white", "black"]] = None,
 ):
+    # 未显式指定时跟随主题：浅色背景用黑字页脚
+    if color is None:
+        from .theme import is_dark_theme
+
+        color = "white" if is_dark_theme() else "black"
     footer = get_footer(color)
     if is_invert:
         r, g, b, a = footer.split()

@@ -10,6 +10,7 @@ from gsuid_core.help.draw_new_plugin_help import get_new_help
 
 from ..version import XutheringWavesUID_version
 from ..utils.image import get_footer
+from ..utils.theme import is_dark_theme
 from ..wutheringwaves_config import PREFIX, ShowConfig, WutheringWavesConfig
 
 ICON = Path(__file__).parent.parent.parent / "ICON.png"
@@ -177,6 +178,7 @@ plugin_help = get_help_data()
 
 
 async def get_help(pm: int):
+    dark = is_dark_theme()
     # 从 ShowConfig 获取自定义配置，如果未配置或路径不存在则使用默认值
     banner_bg_config = ShowConfig.get_config("HelpBannerBgUpload").data
     help_bg_config = ShowConfig.get_config("HelpBgUpload").data
@@ -184,12 +186,14 @@ async def get_help(pm: int):
     column_config = ShowConfig.get_config("HelpColumn").data
 
     # 使用配置的路径（如果存在且配置了）或默认路径
-    if banner_bg_config and Path(banner_bg_config).exists():
+    custom_banner = bool(banner_bg_config and Path(banner_bg_config).exists())
+    if custom_banner:
         banner_bg_path = Path(banner_bg_config)
     else:
         banner_bg_path = TEXT_PATH / "banner_bg.jpg"
 
-    if help_bg_config and Path(help_bg_config).exists():
+    custom_help_bg = bool(help_bg_config and Path(help_bg_config).exists())
+    if custom_help_bg:
         help_bg_path = Path(help_bg_config)
     else:
         help_bg_path = TEXT_PATH / "bg.jpg"
@@ -210,14 +214,14 @@ async def get_help(pm: int):
         plugin_icon=plugin_icon,
         plugin_help=attach_icons(plugin_help, ICON_PATH),
         plugin_prefix=PREFIX,
-        help_mode="dark",
-        banner_bg=banner_bg,
+        help_mode="dark" if dark else "light",
+        banner_bg=banner_bg if (dark or custom_banner) else None,
         banner_sub_text="漂泊者，欢迎在这个时代醒来。",
-        help_bg=help_bg,
-        cag_bg=cag_bg,
-        item_bg=item_bg,
+        help_bg=help_bg if (dark or custom_help_bg) else None,
+        cag_bg=cag_bg if dark else None,
+        item_bg=item_bg if dark else None,
         icon_path=ICON_PATH,
-        footer=get_footer(),
+        footer=get_footer("white" if dark else "black"),
         enable_cache=False,
         column=column_config,
         pm=pm,

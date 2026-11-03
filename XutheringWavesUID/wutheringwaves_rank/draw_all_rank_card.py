@@ -70,6 +70,7 @@ from ..utils.fonts.waves_fonts import (
 from ..utils.resource.constant import ATTRIBUTE_ID_MAP, SPECIAL_CHAR_NAME
 from ..utils.imagetool import get_weapon_icon_bg
 from ..utils.score import get_panel_score_grade
+from ..utils.theme import text as theme_text
 
 TEXT_PATH = Path(__file__).parent / "texture2d"
 TITLE_I = Image.open(TEXT_PATH / "title.png")
@@ -241,19 +242,19 @@ async def draw_all_rank_card(
     text_bar_draw.rectangle([20, 20, 1280, 26], fill=accent_color)
 
     # 左侧标题
-    text_bar_draw.text((40, 60), "上榜条件", GREY, waves_font_28, "lm")
-    text_bar_draw.text((185, 50), "1. 声骸套装为常规套装", SPECIAL_GOLD, waves_font_20, "lm")
+    theme_text(text_bar_draw, (40, 60), "上榜条件", GREY, waves_font_28, "lm")
+    theme_text(text_bar_draw, (185, 50), "1. 声骸套装为常规套装", SPECIAL_GOLD, waves_font_20, "lm")
     cond2 = "2. 登录用户&刷新单角色面板" if rank_type == "综合评分" else "2. 登录用户&刷新面板"
-    text_bar_draw.text((185, 85), cond2, SPECIAL_GOLD, waves_font_20, "lm")
+    theme_text(text_bar_draw, (185, 85), cond2, SPECIAL_GOLD, waves_font_20, "lm")
     if modal_options:
         from ..wutheringwaves_config import PREFIX
         names = "/".join(o["name"] for o in modal_options)
-        text_bar_draw.text((185, 120), f"支持模态: {PREFIX}{char}总排行 {names}", SPECIAL_GOLD, waves_font_20, "lm")
+        theme_text(text_bar_draw, (185, 120), f"支持模态: {PREFIX}{char}总排行 {names}", SPECIAL_GOLD, waves_font_20, "lm")
         current_modal_name = get_modal_name(int(char_id), modal)
         if current_modal_name:
-            text_bar_draw.text((1260, 120), f"当前模态: {current_modal_name}", SPECIAL_GOLD, waves_font_20, "rm")
+            theme_text(text_bar_draw, (1260, 120), f"当前模态: {current_modal_name}", SPECIAL_GOLD, waves_font_20, "rm")
     if cond.active:
-        text_bar_draw.text((1260, 50), f"当前筛选: {cond.label}", SPECIAL_GOLD, waves_font_20, "rm")
+        theme_text(text_bar_draw, (1260, 50), f"当前筛选: {cond.label}", SPECIAL_GOLD, waves_font_20, "rm")
 
     # 备注
     if rank_type == "伤害":
@@ -266,7 +267,7 @@ async def draw_all_rank_card(
 
         with builtin_only():
             temp_notes = rank_standard(char_id, char)
-    text_bar_draw.text((1260, text_bar_h - 30), temp_notes, SPECIAL_GOLD, waves_font_16, "rm")
+    theme_text(text_bar_draw, (1260, text_bar_h - 30), temp_notes, SPECIAL_GOLD, waves_font_16, "rm")
 
     card_img.alpha_composite(text_bar_img, (0, title_h))
 
@@ -310,14 +311,14 @@ async def draw_all_rank_card(
         info_block_draw = ImageDraw.Draw(info_block)
         fill = CHAIN_COLOR[rank.chain] + (int(0.9 * 255),)
         info_block_draw.rounded_rectangle([0, 0, 46, 20], radius=6, fill=fill)
-        info_block_draw.text((5, 10), f"{get_chain_name(rank.chain)}", "white", waves_font_18, "lm")
+        theme_text(info_block_draw, (5, 10), f"{get_chain_name(rank.chain)}", "white", waves_font_18, "lm")
         bar_bg.alpha_composite(info_block, (190, 30))
 
         # 等级
         info_block = Image.new("RGBA", (60, 20), color=(255, 255, 255, 0))
         info_block_draw = ImageDraw.Draw(info_block)
         info_block_draw.rounded_rectangle([0, 0, 60, 20], radius=6, fill=(54, 54, 54, int(0.9 * 255)))
-        info_block_draw.text((5, 10), f"Lv.{rank.level}", "white", waves_font_18, "lm")
+        theme_text(info_block_draw, (5, 10), f"Lv.{rank.level}", "white", waves_font_18, "lm")
         bar_bg.alpha_composite(info_block, (240, 30))
 
         # 评分 / 综合评分
@@ -327,14 +328,14 @@ async def draw_all_rank_card(
             _score_grade = get_panel_score_grade(_score_val) if rank_type == "综合评分" else rank.phantom_score_bg
             score_bg = Image.open(TEXT_PATH / f"score_{_score_grade}.png")
             bar_bg.alpha_composite(score_bg, (545, 2))
-            bar_star_draw.text(
+            theme_text(bar_star_draw, 
                 (707, 45),
                 f"{int(_score_val * 100) / 100:.2f}",
                 "white",
                 waves_font_34,
                 "mm",
             )
-            bar_star_draw.text((707, 75), _score_label, SPECIAL_GOLD, waves_font_16, "mm")
+            theme_text(bar_star_draw, (707, 75), _score_label, SPECIAL_GOLD, waves_font_16, "mm")
 
         # 合鸣效果
         if rank.sonata_name:
@@ -347,7 +348,7 @@ async def draw_all_rank_card(
         sonata_font = waves_font_16
         if len(sonata_name) > 4:
             sonata_font = waves_font_14
-        bar_star_draw.text((815, 75), f"{sonata_name}", "white", sonata_font, "mm")
+        theme_text(bar_star_draw, (815, 75), f"{sonata_name}", "white", sonata_font, "mm")
 
         # 武器
         weapon_bg_temp = Image.new("RGBA", (600, 300))
@@ -363,34 +364,34 @@ async def draw_all_rank_card(
         weapon_icon_bg.paste(weapon_icon, (10, 20), weapon_icon)
 
         weapon_bg_temp_draw = ImageDraw.Draw(weapon_bg_temp)
-        weapon_bg_temp_draw.text(
+        theme_text(weapon_bg_temp_draw, 
             (200, 30),
             f"{weapon_model.name}",
             SPECIAL_GOLD,
             waves_font_40,
             "lm",
         )
-        weapon_bg_temp_draw.text((203, 75), f"Lv.{rank.weapon_level}/90", "white", waves_font_30, "lm")
+        theme_text(weapon_bg_temp_draw, (203, 75), f"Lv.{rank.weapon_level}/90", "white", waves_font_30, "lm")
 
         _x = 220
         _y = 120
         wrc_fill = WEAPON_RESONLEVEL_COLOR[rank.weapon_reson_level] + (int(0.8 * 255),)
         weapon_bg_temp_draw.rounded_rectangle([_x - 15, _y - 15, _x + 50, _y + 15], radius=7, fill=wrc_fill)
-        weapon_bg_temp_draw.text((_x, _y), f"{rank.weapon_reson_level}阶", "white", waves_font_24, "lm")
+        theme_text(weapon_bg_temp_draw, (_x, _y), f"{rank.weapon_reson_level}阶", "white", waves_font_24, "lm")
 
         weapon_bg_temp.alpha_composite(weapon_icon_bg, dest=(45, 0))
 
         bar_bg.alpha_composite(weapon_bg_temp.resize((260, 130)), dest=(850, 25))
 
         # 伤害
-        bar_star_draw.text(
+        theme_text(bar_star_draw, 
             (1140, 45),
             f"{rank.expected_damage:,.0f}",
             SPECIAL_GOLD,
             waves_font_34,
             "mm",
         )
-        bar_star_draw.text((1140, 75), f"{rank.expected_name}", "white", waves_font_16, "mm")
+        theme_text(bar_star_draw, (1140, 75), f"{rank.expected_name}", "white", waves_font_16, "mm")
 
         # 排名
         rank_id = rank.rank
@@ -405,7 +406,7 @@ async def draw_all_rank_card(
             130,
             (waves_font_20, waves_font_18, waves_font_16, waves_font_14, waves_font_12),
         )
-        bar_star_draw.text((210, 75), name_text, "white", name_font, "lm")
+        theme_text(bar_star_draw, (210, 75), name_text, "white", name_font, "lm")
 
         # uid
         uid_color = "white"
@@ -415,7 +416,7 @@ async def draw_all_rank_card(
             _uid_text = _mask_uid(rank.waves_id, rank.user_id)
         else:
             _uid_text = hide_uid(rank.waves_id, user_pref="on" if rank.hide_uid else "")
-        bar_star_draw.text((350, 40), f"特征码: {_uid_text}", uid_color, waves_font_20, "lm")
+        theme_text(bar_star_draw, (350, 40), f"特征码: {_uid_text}", uid_color, waves_font_20, "lm")
 
         # bot主人名字
         botName = rank.alias_name if rank.alias_name else ""
@@ -438,11 +439,11 @@ async def draw_all_rank_card(
     # logo
     title.alpha_composite(logo_img.copy(), dest=(350, 65))
 
-    title_draw.text((600, 335), f"{avg_score}", "white", waves_font_44, "mm")
-    title_draw.text((600, 375), "平均综合评分" if rank_type == "综合评分" else "平均声骸分数", SPECIAL_GOLD, waves_font_20, "mm")
+    theme_text(title_draw, (600, 335), f"{avg_score}", "white", waves_font_44, "mm")
+    theme_text(title_draw, (600, 375), "平均综合评分" if rank_type == "综合评分" else "平均声骸分数", SPECIAL_GOLD, waves_font_20, "mm")
 
-    title_draw.text((790, 335), f"{avg_damage}", "white", waves_font_44, "mm")
-    title_draw.text(
+    theme_text(title_draw, (790, 335), f"{avg_damage}", "white", waves_font_44, "mm")
+    theme_text(title_draw, 
         (790, 375), "平均治疗量" if "治疗" in damage_name else "平均伤害", SPECIAL_GOLD, waves_font_20, "mm"
     )
 
@@ -450,17 +451,17 @@ async def draw_all_rank_card(
         char_name = SPECIAL_CHAR_NAME[char_id]
 
     title_name = f"{char_name}{rank_type}{'群排行' if is_group else '总排行'}"
-    title_draw.text((540, 265), f"{title_name}", "black", waves_font_30, "lm")
+    theme_text(title_draw, (540, 265), f"{title_name}", "black", waves_font_30, "lm")
 
     # 时间
     time_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-    title_draw.text((470, 205), f"{time_str}", GREY, waves_font_20, "lm")
+    theme_text(title_draw, (470, 205), f"{time_str}", GREY, waves_font_20, "lm")
 
     # 版本
     info_block = Image.new("RGBA", (100, 30), color=(255, 255, 255, 0))
     info_block_draw = ImageDraw.Draw(info_block)
     info_block_draw.rounded_rectangle([0, 0, 100, 30], radius=6, fill=(0, 79, 152, int(0.9 * 255)))
-    info_block_draw.text((50, 15), f"v{get_version()}", "white", waves_font_24, "mm")
+    theme_text(info_block_draw, (50, 15), f"v{get_version()}", "white", waves_font_24, "mm")
     _x = 540 + 31 * len(title_name)
     title.alpha_composite(info_block, (_x, 255))
 
