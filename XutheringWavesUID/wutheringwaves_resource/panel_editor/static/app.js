@@ -1827,6 +1827,27 @@ function drawLocalPreview() {
   $("#previewOverlay").classList.remove("is-on");
 }
 
+// 同 image_meta.crop_image: 越界部分填白, 图内保留原透明度
+function drawCropPadded(ctx, raw, crop, dx, dy, dw, dh) {
+  const sx = dw / crop.w, sy = dh / crop.h;
+  const x0 = Math.max(0, crop.x), y0 = Math.max(0, crop.y);
+  const x1 = Math.min(raw.naturalWidth, crop.x + crop.w);
+  const y1 = Math.min(raw.naturalHeight, crop.y + crop.h);
+  const inside = x1 > x0 && y1 > y0;
+  const ix = dx + (x0 - crop.x) * sx, iy = dy + (y0 - crop.y) * sy;
+  const iw = (x1 - x0) * sx, ih = (y1 - y0) * sy;
+  if (!inside || x0 > crop.x || y0 > crop.y || x1 < crop.x + crop.w || y1 < crop.y + crop.h) {
+    ctx.beginPath();
+    ctx.rect(dx, dy, dw, dh);
+    if (inside) ctx.rect(ix, iy, iw, ih);
+    ctx.fillStyle = "white";
+    ctx.fill("evenodd");
+  }
+  if (!inside) return;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(raw, x0, y0, x1 - x0, y1 - y0, ix, iy, iw, ih);
+}
+
 function drawPanelPreview(canvas, assets, raw, crop) {
   const layer = assets.layer;
   const ctx = layer.getContext("2d");
@@ -1837,19 +1858,7 @@ function drawPanelPreview(canvas, assets, raw, crop) {
   const height = Math.max(1, Math.floor(crop.h * factor));
   const left = Math.floor((PANEL_OUT.w - width) / 2);
   const top = Math.floor((PANEL_OUT.h - height) / 2);
-  const sx = width / crop.w, sy = height / crop.h;
-  ctx.fillStyle = "white";
-  ctx.fillRect(left, top, width, height);
-  const x0 = Math.max(0, crop.x), y0 = Math.max(0, crop.y);
-  const x1 = Math.min(raw.naturalWidth, crop.x + crop.w);
-  const y1 = Math.min(raw.naturalHeight, crop.y + crop.h);
-  if (x1 > x0 && y1 > y0) {
-    const dx = left + (x0 - crop.x) * sx, dy = top + (y0 - crop.y) * sy;
-    const dw = (x1 - x0) * sx, dh = (y1 - y0) * sy;
-    ctx.clearRect(dx, dy, dw, dh);
-    ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(raw, x0, y0, x1 - x0, y1 - y0, dx, dy, dw, dh);
-  }
+  drawCropPadded(ctx, raw, crop, left, top, width, height);
   // 与 PIL 的两次带 alpha paste 一致, 避免透明立绘的前端预览和最终出图不一致。
   const pixels = ctx.getImageData(0, 0, layer.width, layer.height);
   const rgba = pixels.data;
@@ -1883,16 +1892,20 @@ function drawMrPreview(canvas, assets, raw, crop) {
     const dw = crop.w * s, dh = crop.h * s;
     ctx.fillStyle = "#0f1115";
     ctx.fillRect(0, 0, W, H);
-    ctx.drawImage(raw, crop.x, crop.y, crop.w, crop.h, (W - dw) / 2, (H - dh) / 2, dw, dh);
+    drawCropPadded(ctx, raw, crop, (W - dw) / 2, (H - dh) / 2, dw, dh);
   } else {
     ctx.drawImage(assets.base, 0, 0, W, H);
     if (assets.renderer === "html") {
-      const w = crop.w * H / crop.h;
+      const w =Math.max(1, Math.round(crop.w * H / crop.h));
+      assets.pileLayer ||= offscreen(w, H);
+      const pc = sizeCanvas(assets.pileLayer, w, H);
+      pc.clearRect(0, 0, w, H);
+      drawCropPadded(pc, raw, crop, 0, 0, w, H);
       Object.assign(ctx, { shadowColor: "rgba(0,0,0,0.3)", shadowOffsetX: -10, shadowBlur: 20 });
-      ctx.drawImage(raw, crop.x, crop.y, crop.w, crop.h, W - MR_PILE_HTML.right - w, MR_PILE_HTML.top, w, H);
+      ctx.drawImage(assets.pileLayer, W - MR_PILE_HTML.right - w, MR_PILE_HTML.top);
       Object.assign(ctx, { shadowColor: "transparent", shadowOffsetX: 0, shadowBlur: 0 });
     } else {
-      ctx.drawImage(raw, crop.x, crop.y, crop.w, crop.h, MR_PILE_PIL.x, MR_PILE_PIL.y, crop.w, crop.h);
+      drawCropPadded(ctx, raw, crop, MR_PILE_PIL.x, MR_PILE_PIL.y, crop.w, crop.h);
     }
   }
   ctx.globalCompositeOperation = "multiply";
@@ -2403,34 +2416,50 @@ const RKO_SCALE = { min: 0.2, max: 3, step: 0.05 };  // 对齐 pile_offset.SCALE
 const RANK_CANVAS = { w: 1050, h: 540, titleH: 500 };
 const RANK_PASTE = { x: 450, y: -120 };
 const PILE_USES = [["", "都用"], ["stamina", "仅体力"], ["rank", "仅排行"]];
-const RANK_LAYER_VER = 1;
+const RANK_LAYER_VER = 3;
 
 function rankLayerUrl(kind, extra = {}) {
   return `${API}/rank-layer?${new URLSearchParams({ kind, ...extra, v: String(RANK_LAYER_VER) })}`;
 }
 
-// 与后端 render_rank_preview 同序: base → pile → text, 整层按 char_mask 抠, 再盖到 bg 上
+function readPixels(img, w, h) {
+  const ctx = offscreen(w, h).getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0);
+  return ctx.getImageData(0, 0, w, h).data;
+}
+
+// 逐像素复刻后端 PIL 序列: title.paste(pile, pile) → 写字 → 按 char_mask paste → alpha_composite 到 bg
 function drawRankPreview(canvas, assets, pile, crop, off) {
-  const layer = assets.layer;
-  const lc = layer.getContext("2d");
-  lc.globalCompositeOperation = "source-over";
-  lc.clearRect(0, 0, layer.width, layer.height);
-  lc.drawImage(assets.base, 0, 0);
+  const { w: W, h: H, titleH: TH } = RANK_CANVAS;
+  const lc = assets.layer.getContext("2d", { willReadFrequently: true });
+  lc.clearRect(0, 0, W, TH);
   // 缩放以立绘中心为锚, 与后端 place_rank_pile 同算法 (floor 取整)
   const s = off?.scale ?? 1;
   const { w, h } = crop;
   const nw = Math.max(1, Math.round(w * s)), nh = Math.max(1, Math.round(h * s));
-  lc.imageSmoothingQuality = "high";
-  lc.drawImage(pile, crop.x, crop.y, w, h,
+  drawCropPadded(lc, pile, crop,
     RANK_PASTE.x + (off?.x || 0) + Math.floor((w - nw) / 2),
     RANK_PASTE.y + (off?.y || 0) + Math.floor((h - nh) / 2), nw, nh);
-  lc.drawImage(assets.text, 0, 0);
-  lc.globalCompositeOperation = "destination-in";
-  lc.drawImage(assets.mask, 0, 0);
-  const c = sizeCanvas(canvas, RANK_CANVAS.w, RANK_CANVAS.h);
-  c.clearRect(0, 0, canvas.width, canvas.height);
-  c.drawImage(assets.bg, 0, 0);
-  c.drawImage(layer, 0, 0);
+  const p = lc.getImageData(0, 0, W, TH).data;
+  assets.px ||= {
+    bg: readPixels(assets.bg, W, H), base: readPixels(assets.base, W, TH),
+    mask: readPixels(assets.mask, W, TH), text: readPixels(assets.text, W, TH),
+  };
+  const { base, mask, text } = assets.px;
+  const out = new ImageData(new Uint8ClampedArray(assets.px.bg), W, H);
+  const o = out.data;
+  for (let i = 0; i < W * TH * 4; i += 4) {
+    const pa = p[i + 3] / 255, ta = text[i + 3] / 255, m = mask[i] / 255;
+    const a1 = pa * pa + mask[i + 1] / 255 * (1 - pa);
+    const tw = ta && a1 * 255 < 0.5 ? 1 : ta;
+    const a = ta + a1 * (1 - ta);
+    const k = a * m * m, kb = 1 - a * m;
+    for (let c = 0; c < 3; c++) {
+      const t1 = p[i + c] * pa + base[i + c] * (1 - pa);
+      o[i + c] = (text[i + c] * tw + t1 * (1 - tw)) * k + o[i + c] * kb;
+    }
+  }
+  sizeCanvas(canvas, W, H).putImageData(out, 0, 0);
 }
 
 function openRankOffsetModal(img) {

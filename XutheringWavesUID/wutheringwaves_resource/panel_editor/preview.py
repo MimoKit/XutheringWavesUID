@@ -276,24 +276,25 @@ async def render_rank_preview(
 
 def rank_layer_bytes(kind: str, char_id: str = "", pile_path: Optional[Path] = None) -> Tuple[bytes, str]:
     """前端 canvas 拼排行预览的分层素材 → (bytes, media_type)。
-    bg: 背景 jpg; base: title+logo png; mask: 仅 alpha 的 png (char_mask 的 A 通道, 供 destination-in);
+    bg: 背景 jpg; base: title+logo 的 RGB (不透明, 保留透明处的 RGB);
+    mask: 不透明 png, R=char_mask 的 A, G=title+logo 的 A;
     text: 透明底文字 png; pile: 原尺寸带 alpha 的 webp。
     """
     if kind == "bg":
         return _pil_to_jpeg_bytes(_rank_bg(), quality=85), "image/jpeg"
     if kind == "base":
-        return _png_bytes(_rank_base()), "image/png"
+        return _png_bytes(_rank_base().convert("RGB")), "image/png"
     if kind == "mask":
         src = _rank_mask()
-        mask = Image.new("RGBA", src.size, (0, 0, 0, 0))
-        mask.putalpha(src.getchannel("A") if "A" in src.getbands() else src.convert("L"))
-        return _png_bytes(mask), "image/png"
+        mask = src.getchannel("A") if "A" in src.getbands() else src.convert("L")
+        packed = Image.merge("RGB", (mask, _rank_base().getchannel("A"), Image.new("L", mask.size)))
+        return _png_bytes(packed), "image/png"
     if kind == "text":
         text = Image.new("RGBA", _rank_mask().size, (0, 0, 0, 0))
         _draw_rank_text(text, _rank_char_name(char_id))
         return _png_bytes(text), "image/png"
     if kind == "pile" and pile_path is not None:
-        pile = open_meta_image(pile_path, white_pad=False)
+        pile = open_meta_image(pile_path)
         buf = BytesIO()
         pile.save(buf, "WEBP", quality=85, method=4)
         return buf.getvalue(), "image/webp"
@@ -393,7 +394,7 @@ async def render_mr_preview(
     use_html: True 走 HTML, 失败回退 PIL。
     """
     try:
-        pile = open_meta_image(image_path, white_pad=False)
+        pile = open_meta_image(image_path)
     except Exception as e:
         logger.warning(f"[鸣潮·面板编辑] 读取 MR 图失败 {image_path}: {e}")
         return None
