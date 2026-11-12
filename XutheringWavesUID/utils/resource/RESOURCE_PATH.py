@@ -27,6 +27,8 @@ CACHE_PATH = MAIN_PATH / "cache"
 RESOURCE_PATH = MAIN_PATH / "resource"
 PHANTOM_PATH = RESOURCE_PATH / "phantom"
 MATERIAL_PATH = RESOURCE_PATH / "material"
+MONSTER_PATH = RESOURCE_PATH / "monster"
+SLASH_BUFF_PATH = RESOURCE_PATH / "slash_buff"
 AVATAR_PATH = RESOURCE_PATH / "waves_avatar"
 WEAPON_PATH = RESOURCE_PATH / "waves_weapon"
 ROLE_PILE_PATH = RESOURCE_PATH / "role_pile"
@@ -104,6 +106,7 @@ POKER_PATH = OTHER_PATH / "poker"
 WIKI_CACHE_PATH = OTHER_PATH / "wiki"
 BBS_PATH = OTHER_PATH / "bbs"
 SIGN_SURFACE_PATH = OTHER_PATH / "sign_surface"
+MATERIAL_ICON_PATH = OTHER_PATH / "material"
 
 # 基础别名文件路径
 ALIAS_PATH = MAIN_PATH / "alias"
@@ -122,6 +125,8 @@ def init_dir():
         RESOURCE_PATH,
         PHANTOM_PATH,
         MATERIAL_PATH,
+        MONSTER_PATH,
+        SLASH_BUFF_PATH,
         AVATAR_PATH,
         WEAPON_PATH,
         ROLE_PILE_PATH,
@@ -149,6 +154,7 @@ def init_dir():
         WIKI_CACHE_PATH,
         BBS_PATH,
         SIGN_SURFACE_PATH,
+        MATERIAL_ICON_PATH,
         BUILD_PATH,
         BUILD_TEMP,
         MAP_BUILD_PATH,
